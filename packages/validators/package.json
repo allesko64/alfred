@@ -1,0 +1,14 @@
+{
+  "name": "@alfred/validators",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  }
+}
