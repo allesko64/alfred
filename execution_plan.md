@@ -13,7 +13,7 @@
 
 ---
 
-## Phase 0 — Project Setup & Monorepo Foundation
+<!-- ## Phase 0 — Project Setup & Monorepo Foundation -->
 > Goal: Empty repo → working monorepo with all packages scaffolded
 
 ### 0.1 — Initialize the Monorepo
@@ -65,6 +65,7 @@
   - `GITHUB_CLIENT_ID`
   - `GITHUB_CLIENT_SECRET`
   - `ANTHROPIC_API_KEY`
+  - `OPENAI_API_KEY`
   - `UPSTASH_REDIS_URL`
   - `UPSTASH_REDIS_TOKEN`
   - `INNGEST_EVENT_KEY`
@@ -72,12 +73,13 @@
   - `RAZORPAY_KEY_ID`
   - `RAZORPAY_KEY_SECRET`
   - `WEBHOOK_SECRET`
+  - `RESEND_API_KEY`
 
 **Test:** All env vars load correctly. No undefined errors on startup.
 
 ---
 
-## Phase 1 — Database Schema & Migrations
+<!-- ## Phase 1 — Database Schema & Migrations
 > Goal: Complete PostgreSQL schema with all tables, indexes, and constraints
 
 ### 1.1 — Setup Drizzle + PostgreSQL
@@ -374,7 +376,7 @@
 
 **Test:** Insert a test workflow run. Update status and progress. Verify UI can poll this table for real-time progress.
 
----
+--- -->
 
 ## Phase 2 — Authentication
 > Goal: Full auth flow working — signup, login, OAuth, sessions
@@ -676,6 +678,44 @@
 
 ---
 
+### 6.1.1 — Smart Duplicate Detection (Alfred Smart Suggestions)
+- [ ] Before creating a feature, call `feature.checkDuplicate` tRPC procedure:
+  - Embeds the feature title + description via OpenAI
+  - Queries pgvector for similar existing PRDs
+  - Returns: top 3 similar features with similarity score
+  - Threshold: if similarity > 80% → show warning
+- [ ] Build duplicate detection UI on the new feature form:
+  - After user types title + description and clicks Submit
+  - Alfred checks for duplicates BEFORE creating the feature
+  - If duplicate found → show warning card:
+    ```
+    ⚠️ Similar feature already exists:
+    "Theme Customization" (SHIPPED 3 months ago)
+    → May already cover this request
+
+    💡 Related feature in progress:
+    "User Preferences Panel" (IN DEVELOPMENT)
+    → Could include this instead
+
+    [ Create anyway ] [ View existing ] [ Add as subtask ]
+    ```
+  - If no duplicate → proceed normally
+- [ ] Create tRPC procedure: `feature.addAsSubtask`
+  - Links new request as a task under an existing feature
+  - Creates task row instead of feature row
+- [ ] Add `changelog` table to DB:
+  - `id` (uuid, PK)
+  - `workspace_id` (uuid, FK → workspaces)
+  - `feature_id` (uuid, FK → features)
+  - `version` (text) ← auto-generated e.g. "v2.4.0"
+  - `entry` (text) ← Claude-generated changelog text
+  - `type` (enum: feature/fix/improvement)
+  - `created_at` (timestamp)
+
+**Test:** Submit "Add night mode" → Alfred detects similarity to existing "Dark Mode" feature → warning card shows with 3 options. Click "Create anyway" → feature created normally. Click "Add as subtask" → task created under existing feature.
+
+---
+
 ### 6.2 — Alfred Clarification Chat (Backend)
 - [ ] Create Inngest workflow: `clarification`
   - Step 1: Fetch feature request from DB
@@ -839,6 +879,37 @@
 
 ---
 
+### 8.5 — PR Description Auto-Generator
+- [ ] Create Inngest workflow step inside `pr-ingestion`:
+  - After PR is linked to a feature
+  - Fetch: PRD requirements, engineering tasks, acceptance criteria
+  - Call Claude (Haiku — cheap, fast) to generate PR description
+  - Structured output:
+    ```
+    ## What does this PR do?
+    [Claude-generated summary based on PRD]
+
+    ## Changes made:
+    [List of tasks completed]
+
+    ## Acceptance criteria satisfied:
+    [Checklist from PRD]
+
+    ## Alfred feature link:
+    https://alfred.ai/features/feat_123
+    ```
+  - Post generated description to GitHub PR via Octokit
+    (`PATCH /repos/{owner}/{repo}/pulls/{pull_number}`)
+  - Save generated description to `pull_requests.body` in DB
+- [ ] Show in feature detail UI (IN_DEVELOPMENT tab):
+  - "Alfred generated your PR description" confirmation
+  - Preview of the generated description
+  - "Regenerate" button if developer wants a new version
+
+**Test:** Link a PR to a feature → within 30 seconds → GitHub PR description is auto-populated with structured content → Alfred confirmation shows in UI.
+
+---
+
 ## Phase 9 — AI Review Loop
 > Goal: Alfred reviews PRs, finds issues, re-reviews after fixes
 
@@ -956,6 +1027,35 @@
 
 ---
 
+### 10.4 — Auto Changelog Generation
+- [ ] On feature SHIPPED → trigger Inngest `changelog-generation` step:
+  - Step 1: Fetch feature title, PRD summary, tasks completed
+  - Step 2: Call Claude (Haiku — cheap) to generate changelog entry:
+    - Type: feature / fix / improvement (inferred from PRD)
+    - One clean paragraph describing what shipped
+    - Written for end users, not developers
+  - Step 3: Auto-generate version number:
+    - Query last changelog entry for workspace
+    - Increment minor version (v1.0.0 → v1.1.0)
+    - Or patch version for fixes (v1.0.0 → v1.0.1)
+  - Step 4: Save to `changelog` table
+  - Step 5: Update workflow progress: "Changelog updated"
+- [ ] Create `/workspace/[id]/changelog` page:
+  - Groups entries by version
+  - Shows date, version, type badge, entry text
+  - Each entry links back to the feature
+  - Clean timeline layout
+  - Public shareable URL: `/changelog/[workspaceSlug]`
+- [ ] Add changelog link to:
+  - Dashboard sidebar
+  - Feature detail page after shipping
+  - Notification: "Changelog updated — v1.4.0"
+- [ ] Add `changelog` to DB schema (already added in 6.1.1)
+
+**Test:** Approve a feature → changelog entry auto-generated → appears on /changelog page → version number incremented correctly → type badge correct (feature/fix/improvement).
+
+---
+
 ## Phase 11 — Billing & Plan Gates
 > Goal: Razorpay integration with real feature gating
 
@@ -1027,6 +1127,52 @@
 - [ ] Auto-refresh unread count every 30 seconds
 
 **Test:** Create a notification in DB → bell shows badge count. Click bell → notification shows. Click notification → navigates to correct feature.
+
+---
+
+### 12.3 — Alfred Daily Digest
+- [ ] Install Resend for email: `pnpm add resend`
+- [ ] Add `RESEND_API_KEY` to `.env.example` and `.env.local`
+- [ ] Get API key from resend.com (free tier: 3000 emails/month)
+- [ ] Create Inngest scheduled workflow: `daily-digest`
+  - Schedule: every day at 9:00 AM (cron: `0 9 * * *`)
+  - Step 1: Fetch all active workspaces
+  - Step 2: For each workspace, fetch each member
+  - Step 3: For each member build their digest:
+    - 🔴 Needs attention: blocking issues assigned to them
+    - 🔴 Pending approvals: features waiting for their review
+    - 🟡 In progress: features they own currently being processed
+    - ✅ Shipped yesterday: features that shipped in last 24hrs
+  - Step 4: Call Claude (Haiku) to write personalized intro line:
+    - "Good morning Aks! You have a busy day ahead."
+    - "Hey Rahul, smooth sailing today — one approval needed."
+  - Step 5: Send email via Resend with digest content
+  - Step 6: Create in-app notification: "Your daily digest is ready"
+- [ ] Build digest email template:
+  ```
+  Subject: Your Alfred digest — [Day], [Date]
+
+  Good morning [Name] 👋
+
+  🔴 Needs your attention:
+  → PR #47 has 2 blocking issues waiting for fixes
+  → "Search API" is pending your approval
+
+  🟡 In progress:
+  → "Dark Mode" is being reviewed by Alfred
+  → "CSV Export" PRD is being generated
+
+  ✅ Shipped yesterday:
+  → "Auth Refactor" was approved and shipped
+
+  [ Open Alfred → ]
+  ```
+- [ ] Add digest preferences to user settings:
+  - Enable/disable daily digest
+  - Choose delivery time (default 9 AM)
+  - Choose timezone
+
+**Test:** Trigger the Inngest scheduled workflow manually → email received in inbox → content matches real DB state → in-app notification created → clicking email link opens correct Alfred page.
 
 ---
 
@@ -1143,8 +1289,17 @@
   - Environment variables (all variables with descriptions)
   - Database schema notes
   - GitHub integration setup guide
-  - Inngest workflow explanation (all 7 workflows)
-  - AI features implemented (all 5 agents)
+  - Inngest workflow explanation (all 10 workflows)
+  - AI features implemented:
+    - Clarification agent
+    - PRD generation
+    - Task generation
+    - Smart duplicate detection
+    - PR description auto-generator
+    - AI code review
+    - Release readiness check
+    - Auto changelog generation
+    - Daily digest personalization
   - Authorization model explanation (Zanzibar-inspired)
   - Permission caching explanation (LRU + Redis)
   - Vector search explanation (pgvector)
@@ -1751,13 +1906,13 @@
 | 3 | tRPC + middleware | Engineering Quality |
 | 4 | Onboarding flow | SaaS Experience |
 | 5 | Dashboard | SaaS Experience |
-| 6 | Feature request + clarification + PRD | Core Workflow + AI Quality |
+| 6 | Feature request + Smart Suggestions + clarification + PRD | Core Workflow + AI Quality |
 | 7 | Task generation + Kanban | Core Workflow + AI Quality |
-| 8 | GitHub webhooks + Octokit | GitHub Integration |
+| 8 | GitHub webhooks + Octokit + PR Description Auto-Generator | GitHub Integration + AI Quality |
 | 9 | AI review loop | AI Quality + Review Loop |
-| 10 | Human approval + ship | Review Loop |
+| 10 | Human approval + ship + Auto Changelog | Review Loop + AI Quality |
 | 11 | Razorpay billing | SaaS Experience |
-| 12 | Real-time + notifications | Engineering Quality |
+| 12 | Real-time + notifications + Daily Digest | Engineering Quality + AI Quality |
 | 13 | pgvector repo indexing | AI Quality + GitHub |
 | 14 | Polish + error states | SaaS Experience |
 | 15 | README + Scalar API docs | Demo & Documentation |

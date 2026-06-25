@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: alfred
+      POSTGRES_PASSWORD: alfred
+      POSTGRES_DB: alfred
+    ports:
+      - "5432:5432"
+    volumes:
+      - alfred_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  alfred_postgres_data:
