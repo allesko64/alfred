@@ -102,8 +102,7 @@ CREATE TABLE "repositories" (
 	"name" text,
 	"default_branch" text,
 	"webhook_id" bigint,
-	"webhook_secret" text,
-	"access_token" text,
+	"installation_id" bigint NOT NULL,
 	"is_indexed" boolean DEFAULT false NOT NULL,
 	"indexed_at" timestamp,
 	"created_at" timestamp DEFAULT now() NOT NULL,
@@ -324,6 +323,7 @@ CREATE INDEX "workspace_memberships_user_workspace_idx" ON "workspace_membership
 CREATE UNIQUE INDEX "workspace_memberships_user_workspace_unique" ON "workspace_memberships" USING btree ("user_id","workspace_id");--> statement-breakpoint
 CREATE INDEX "repositories_workspace_idx" ON "repositories" USING btree ("workspace_id");--> statement-breakpoint
 CREATE INDEX "repositories_github_repo_id_idx" ON "repositories" USING btree ("github_repo_id");--> statement-breakpoint
+CREATE INDEX "repositories_installation_id_idx" ON "repositories" USING btree ("installation_id");--> statement-breakpoint
 CREATE INDEX "features_workspace_idx" ON "features" USING btree ("workspace_id");--> statement-breakpoint
 CREATE INDEX "features_status_idx" ON "features" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "features_project_idx" ON "features" USING btree ("project_id");--> statement-breakpoint

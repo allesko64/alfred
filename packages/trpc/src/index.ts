@@ -1,2 +1,17 @@
-// @alfred/trpc — placeholder until Phase 3
-export const placeholder = true
+export { appRouter, type AppRouter } from "./root";
+export { createContext, type Context, type AuthSession } from "./context";
+export {
+  createTRPCRouter,
+  mergeRouters,
+  middleware,
+  publicProcedure,
+  protectedProcedure,
+  workspaceProcedure,
+  requireWorkspaceRole,
+} from "./trpc";
+export {
+  getMembershipRole,
+  requireMembership,
+  invalidateMembershipCache,
+  type MembershipRole,
+} from "./permissions";

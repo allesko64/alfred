@@ -1,6 +1,6 @@
 {
-  "id": "ae491941-ddc5-4016-831b-2458f3a6bca9",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "77668eb2-f9c9-43c1-ab45-d6f054e2645d",
+  "prevId": "ae491941-ddc5-4016-831b-2458f3a6bca9",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -220,6 +220,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "email_verified": {
+          "name": "email_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "avatar_url": {
           "name": "avatar_url",

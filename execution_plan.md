@@ -13,7 +13,7 @@
 
 ---
 
-<!-- ## Phase 0 — Project Setup & Monorepo Foundation -->
+## Phase 0 — Project Setup & Monorepo Foundation
 > Goal: Empty repo → working monorepo with all packages scaffolded
 
 ### 0.1 — Initialize the Monorepo
@@ -64,6 +64,9 @@
   - `NEXTAUTH_URL`
   - `GITHUB_CLIENT_ID`
   - `GITHUB_CLIENT_SECRET`
+  - `GITHUB_APP_ID`
+  - `GITHUB_APP_PRIVATE_KEY`
+  - `GITHUB_APP_WEBHOOK_SECRET`
   - `ANTHROPIC_API_KEY`
   - `OPENAI_API_KEY`
   - `UPSTASH_REDIS_URL`
@@ -79,7 +82,7 @@
 
 ---
 
-<!-- ## Phase 1 — Database Schema & Migrations
+<!-- ## Phase 1 — Database Schema & Migrations -->
 > Goal: Complete PostgreSQL schema with all tables, indexes, and constraints
 
 ### 1.1 — Setup Drizzle + PostgreSQL
@@ -156,16 +159,16 @@
   - `owner` (text)
   - `name` (text)
   - `default_branch` (text)
-  - `webhook_id` (bigint) ← GitHub webhook ID
-  - `webhook_secret` (text)
-  - `access_token` (text) ← PAT or OAuth token
+  - `webhook_id` (bigint) ← GitHub webhook ID (auto-registered by GitHub App)
+  - `installation_id` (bigint, not null) ← GitHub App installation ID
   - `is_indexed` (boolean, default false) ← vectorization status
   - `indexed_at` (timestamp)
   - `created_at` (timestamp)
 - [ ] Add indexes on `repositories(workspace_id)` and `repositories(github_repo_id)`
+- [ ] Add index on `repositories(installation_id)`
 - [ ] Run migration
 
-**Test:** Drizzle Studio → confirm tables exist. Verify foreign key constraints show correctly.
+**Test:** Drizzle Studio → confirm tables exist. Verify `installation_id` column present. Verify foreign key constraints show correctly.
 
 ---
 
@@ -376,7 +379,7 @@
 
 **Test:** Insert a test workflow run. Update status and progress. Verify UI can poll this table for real-time progress.
 
---- -->
+---
 
 ## Phase 2 — Authentication
 > Goal: Full auth flow working — signup, login, OAuth, sessions
@@ -436,10 +439,10 @@
 ---
 
 ### 2.5 — Auth Middleware & Route Protection
-- [ ] Create Next.js middleware to protect all `/dashboard` and `/workspace` routes
-- [ ] Redirect unauthenticated users to `/login`
-- [ ] Redirect authenticated users away from `/login` and `/signup`
-- [ ] Store return URL for post-login redirect
+- [x] Create Next.js middleware to protect all `/dashboard` and `/workspace` routes
+- [x] Redirect unauthenticated users to `/login`
+- [x] Redirect authenticated users away from `/login` and `/signup`
+- [x] Store return URL for post-login redirect
 
 **Test:** Visit `/dashboard` without login → redirects to `/login`. Login → redirects back to `/dashboard`.
 
@@ -449,38 +452,38 @@
 > Goal: Type-safe API layer with auth + permission middleware
 
 ### 3.1 — tRPC Base Setup
-- [ ] Install tRPC in `packages/trpc`
-- [ ] Create tRPC context (includes: session, user, db)
-- [ ] Create base tRPC instance with context
-- [ ] Create 3 procedure types:
+- [x] Install tRPC in `packages/trpc`
+- [x] Create tRPC context (includes: session, user, db)
+- [x] Create base tRPC instance with context
+- [x] Create 3 procedure types:
   - `publicProcedure` — no auth required
   - `protectedProcedure` — requires valid session
   - `workspaceProcedure` — requires session + workspace membership
-- [ ] Export router creator and all procedure types
-- [ ] Set up tRPC HTTP handler in `apps/web/app/api/trpc/[trpc]/route.ts`
+- [x] Export router creator and all procedure types
+- [x] Set up tRPC HTTP handler in `apps/web/app/api/trpc/[trpc]/route.ts`
 
 **Test:** Create a dummy `hello` public procedure. Call it from the frontend. Confirm typed response.
 
 ---
 
 ### 3.2 — Permission Middleware (Zanzibar Layer)
-- [ ] Create permission check function in `packages/trpc`:
+- [x] Create permission check function in `packages/trpc`:
   - Takes: userId, workspaceId, requiredRoles[]
   - Checks L1 LRU cache first
   - Checks L2 Upstash Redis second
   - Falls back to DB query
   - Returns: role or throws FORBIDDEN
-- [ ] Create LRU cache instance (max 500, TTL 1 min)
-- [ ] Connect Upstash Redis client
-- [ ] Create cache invalidation function
-- [ ] Wire permission check into `workspaceProcedure` middleware
+- [x] Create LRU cache instance (max 500, TTL 1 min)
+- [x] Connect Upstash Redis client
+- [x] Create cache invalidation function
+- [x] Wire permission check into `workspaceProcedure` middleware
 
 **Test:** Create a protected workspace route. Call it without workspace membership → FORBIDDEN error. Add membership → succeeds.
 
 ---
 
 ### 3.3 — Core Routers Setup
-- [ ] Create router files in `packages/trpc/routers/`:
+- [x] Create router files in `packages/trpc/routers/`:
   - `workspace.router.ts`
   - `project.router.ts`
   - `feature.router.ts`
@@ -491,16 +494,16 @@
   - `notification.router.ts`
   - `billing.router.ts`
   - `user.router.ts`
-- [ ] Create root `appRouter` combining all routers
-- [ ] Export `AppRouter` type from `packages/trpc`
-- [ ] Import `AppRouter` type in `apps/web` for client
+- [x] Create root `appRouter` combining all routers
+- [x] Export `AppRouter` type from `packages/trpc`
+- [x] Import `AppRouter` type in `apps/web` for client
 
 **Test:** Import `AppRouter` in the Next.js app. TypeScript should show all router namespaces with correct types. Zero type errors.
 
 ---
 
 ### 3.4 — Zod Validators Setup
-- [ ] Create Zod schemas in `packages/validators` for every input:
+- [x] Create Zod schemas in `packages/validators` for every input:
   - `createWorkspace.schema.ts`
   - `createFeature.schema.ts`
   - `createTask.schema.ts`
@@ -508,9 +511,9 @@
   - `inviteMember.schema.ts`
   - `createPRD.schema.ts`
   - etc.
-- [ ] Export all schemas from `packages/validators/index.ts`
-- [ ] Import validators in `packages/trpc` routers (NOT redefined — imported)
-- [ ] Import validators in `apps/web` forms (same schema, same source)
+- [x] Export all schemas from `packages/validators/index.ts`
+- [x] Import validators in `packages/trpc` routers (NOT redefined — imported)
+- [ ] Import validators in `apps/web` forms (same schema, same source) — no workspace/feature/task forms exist yet (Phase 4+); login/signup forms already use `@alfred/validators`
 
 **Test:** Change a validator field name in `packages/validators`. Confirm TypeScript errors appear in BOTH the router AND the frontend form simultaneously.
 
@@ -540,22 +543,82 @@
 
 ---
 
+### 4.2.1 — Create GitHub App (One-Time Setup)
+> Do this BEFORE building the connect GitHub UI
+
+- [ ] Go to `github.com/settings/apps → New GitHub App`
+- [ ] Fill in these details:
+  - **App name:** Alfred (or Alfred-Dev for local testing)
+  - **Homepage URL:** `https://yourdomain.com` (or `http://localhost:3000` for dev)
+  - **Callback URL:** `https://yourdomain.com/api/github/callback`
+  - **Webhook URL:** `https://yourdomain.com/api/webhooks/github`
+    - Use ngrok URL during local dev: `https://abc123.ngrok.io/api/webhooks/github`
+  - **Webhook secret:** generate with `openssl rand -base64 32` → save as `GITHUB_APP_WEBHOOK_SECRET`
+- [ ] Set these permissions:
+  - Repository → Contents: **Read**
+  - Repository → Pull requests: **Read & Write** ← to post review comments
+  - Repository → Metadata: **Read**
+  - Repository → Webhooks: **Read & Write** ← auto-registers on install
+- [ ] Subscribe to these events:
+  - Pull request
+  - Push
+- [ ] Set "Where can this GitHub App be installed?" → **Any account**
+- [ ] Create the app
+- [ ] After creating:
+  - Copy **App ID** → save as `GITHUB_APP_ID`
+  - Generate **Private Key** → download `.pem` file → save contents as `GITHUB_APP_PRIVATE_KEY`
+  - Copy **Client ID** → save as `GITHUB_CLIENT_ID`
+  - Generate **Client Secret** → save as `GITHUB_CLIENT_SECRET`
+- [ ] Add all to `.env.local`
+
+**Test:** GitHub App appears in `github.com/settings/apps`. All credentials saved in `.env.local`. App ID and Private Key are not empty.
+
+---
+
+### 4.2.2 — Setup ngrok for Local Webhook Testing
+- [ ] Install ngrok: `npm install -g ngrok` or download from ngrok.com
+- [ ] Create free ngrok account at ngrok.com
+- [ ] Add your auth token: `ngrok config add-authtoken YOUR_TOKEN`
+- [ ] Start ngrok tunnel:
+  ```bash
+  ngrok http 3000
+  ```
+- [ ] Copy the HTTPS URL (e.g. `https://abc123.ngrok.io`)
+- [ ] Update GitHub App webhook URL in GitHub settings to use ngrok URL
+- [ ] Add ngrok URL to `.env.local` as `NEXTAUTH_URL` temporarily
+
+**Test:** Start ngrok → visit the ngrok URL in browser → Alfred app loads. GitHub App webhook URL points to ngrok URL.
+
+---
+
 ### 4.3 — Connect GitHub Step (UI + API)
 - [ ] Create `/onboarding/github` page
-- [ ] Two options: GitHub OAuth App OR Personal Access Token
-- [ ] PAT flow:
-  - User pastes token
-  - Call `github.validateToken` tRPC procedure
-  - Fetch user's repos via Octokit
-  - Show repo selector dropdown
-  - User selects repo
-  - Call `github.connectRepo` tRPC procedure
-- [ ] OAuth App flow (later — PAT first for speed)
-- [ ] On connect: register webhook on the repo via Octokit
-- [ ] Save repo to `repositories` table
-- [ ] Fire Inngest `repo-vectorization` event
+- [ ] Single clear CTA: "Install Alfred on GitHub" button
+- [ ] Button links to GitHub App installation URL:
+  `https://github.com/apps/alfred/installations/new`
+- [ ] Create GitHub App callback handler:
+  `apps/web/app/api/github/callback/route.ts`
+  - Receives: `installation_id` + `setup_action` from GitHub
+  - Exchanges code for installation token via `@octokit/auth-app`
+  - Fetches list of installed repositories via Octokit
+  - Saves each repo to `repositories` table with `installation_id`
+  - Registers workspace ↔ installation mapping
+  - Redirects to onboarding team step
+- [ ] Install required packages:
+  ```bash
+  pnpm add @octokit/app @octokit/auth-app @octokit/rest
+  ```
+- [ ] Create Octokit App instance in `packages/ai/src/github.ts`:
+  - Initialized with: App ID + Private Key
+  - Used for ALL GitHub API calls throughout the app
+  - Creates installation-specific Octokit client per request
+- [ ] Show installed repos on the connect page after installation:
+  - List of repos Alfred now has access to
+  - Green checkmarks next to each
+  - "Add more repos" button → reinstall flow
+- [ ] Fire Inngest `repo-vectorization` event for each connected repo
 
-**Test:** Paste a real GitHub PAT → repos load → select one → webhook appears in GitHub repo settings → repository row in DB → Inngest event fires.
+**Test:** Click "Install Alfred on GitHub" → GitHub permission screen → select repos → redirected back to Alfred → repos appear in `repositories` table with `installation_id` → webhook automatically appears in GitHub repo settings → Inngest vectorization fires.
 
 ---
 
@@ -828,42 +891,59 @@
 
 ### 8.1 — Webhook Handler
 - [ ] Create webhook endpoint: `apps/web/app/api/webhooks/github/route.ts`
-- [ ] Verify GitHub webhook signature (HMAC-SHA256)
-- [ ] Parse event type: `pull_request`
-- [ ] Handle events: `opened`, `synchronize`, `closed`, `merged`
-- [ ] On valid event: fire Inngest `pr-ingestion` event with payload
-- [ ] Return 200 immediately (async processing)
+- [ ] Verify GitHub webhook signature using `GITHUB_APP_WEBHOOK_SECRET`:
+  - Use HMAC-SHA256 signature verification
+  - GitHub App sends `X-Hub-Signature-256` header automatically
+  - Reject any request where signature doesn't match → 401
+- [ ] Parse event type from `X-GitHub-Event` header
+- [ ] Handle pull_request events: `opened`, `synchronize`, `closed`, `merged`
+- [ ] Handle installation events: `created`, `deleted`
+  - `created` → save new installation to DB
+  - `deleted` → mark repos as disconnected in DB
+- [ ] On valid PR event: fire Inngest `pr-ingestion` event with payload
+- [ ] Return 200 immediately (async processing via Inngest)
+- [ ] Use `@octokit/webhooks` for signature verification:
+  ```bash
+  pnpm add @octokit/webhooks
+  ```
 
-**Test:** Send a test webhook payload via GitHub repo settings → endpoint receives it → signature verified → Inngest event fires. Bad signature → 401 returned.
+**Test:** Send a test webhook payload via GitHub App settings → endpoint receives it → signature verified using `GITHUB_APP_WEBHOOK_SECRET` → Inngest event fires. Bad signature → 401 returned. Installation deleted event → repo marked disconnected in DB.
 
 ---
 
 ### 8.2 — PR Ingestion Workflow (Inngest)
 - [ ] Create Inngest workflow: `pr-ingestion`
   - Step 1: Find repository in DB by `github_repo_id`
-  - Step 2: Fetch full PR details via Octokit
-  - Step 3: Fetch PR diff via Octokit (`GET /repos/{owner}/{repo}/pulls/{pull_number}/files`)
-  - Step 4: Upsert PR to `pull_requests` table
-  - Step 5: Try to auto-link to a feature (by branch name pattern: `alfred/feature-id`)
-  - Step 6: If linked → update feature status to PR_LINKED → fire `ai-review` event
-  - Step 7: If not linked → create notification: "New PR needs to be linked"
+  - Step 2: Get installation-specific Octokit client:
+    - Use `installation_id` from repository row
+    - `@octokit/auth-app` auto-generates + rotates token
+    - Token valid for 1 hour — handled automatically
+  - Step 3: Fetch full PR details via Octokit
+  - Step 4: Fetch PR diff via Octokit (`GET /repos/{owner}/{repo}/pulls/{pull_number}/files`)
+  - Step 5: Upsert PR to `pull_requests` table
+  - Step 6: Try to auto-link to a feature (by branch name pattern: `alfred/feature-id`)
+  - Step 7: If linked → update feature status to PR_LINKED → fire `ai-review` event
+  - Step 8: If not linked → create notification: "New PR needs to be linked"
 
-**Test:** Open a real PR in a connected repo → webhook fires → PR appears in `pull_requests` table → diff is fetched and stored.
+**Test:** Open a real PR in a connected repo → webhook fires → PR appears in `pull_requests` table → diff is fetched using installation token (not PAT) → stored correctly.
 
 ---
 
 ### 8.3 — GitHub Integration Page (UI)
 - [ ] Create `/workspace/[id]/github` page
-- [ ] Show connected repository info:
-  - Repo name, owner, default branch
-  - Webhook status (active/inactive)
-  - Last webhook received timestamp
-  - Indexing status (vectorization progress)
-- [ ] List recent PRs from DB
-- [ ] Manual PR link button (link a PR to a feature)
-- [ ] "Reconnect" and "Disconnect" repo buttons
+- [ ] Show GitHub App installation info:
+  - Installation status (active/suspended/not installed)
+  - Installed by (user who connected)
+  - Connected repositories list with status
+  - Webhook delivery status (last received timestamp)
+  - Indexing status per repo (vectorization progress)
+- [ ] List recent PRs from DB per connected repo
+- [ ] "Add more repositories" button → GitHub App reinstall flow
+- [ ] "Suspend access" button → suspends GitHub App installation
+- [ ] "Uninstall Alfred" button → removes GitHub App from their account
+- [ ] Show clear installation instructions if not yet installed
 
-**Test:** Page shows correct repo info. Webhook status shows "active" after setup. PRs list shows real PRs from DB.
+**Test:** Page shows correct GitHub App installation info. All connected repos listed. Webhook status shows last received timestamp. "Add more repositories" opens GitHub App settings.
 
 ---
 
@@ -1181,19 +1261,21 @@
 
 ### 13.1 — Vectorization Workflow (Inngest)
 - [ ] Create Inngest workflow: `repo-vectorization`
-  - Step 1: Fetch file tree via Octokit (`GET /repos/{owner}/{repo}/git/trees/{sha}?recursive=1`)
-  - Step 2: Filter to code files only (by extension)
-  - Step 3: Update progress: "Indexing your codebase... (0/247 files)"
-  - Step 4: For each file batch (10 at a time):
-    - Fetch file content via Octokit
+  - Step 1: Fetch repository from DB (includes `installation_id`)
+  - Step 2: Get installation-specific Octokit client using `installation_id`
+  - Step 3: Fetch file tree via Octokit (`GET /repos/{owner}/{repo}/git/trees/{sha}?recursive=1`)
+  - Step 4: Filter to code files only (by extension)
+  - Step 5: Update progress: "Indexing your codebase... (0/247 files)"
+  - Step 6: For each file batch (10 at a time):
+    - Fetch file content via Octokit (using installation token)
     - Chunk into 500-token segments
     - Embed via OpenAI text-embedding-3-small
     - Upsert to `code_chunks` table
     - Update progress percentage
-  - Step 5: Mark repository as indexed
-  - Step 6: Update workflow progress: "Complete — 247 files indexed"
+  - Step 7: Mark repository as indexed
+  - Step 8: Update workflow progress: "Complete — 247 files indexed"
 
-**Test:** Connect a real repo → vectorization workflow runs → `code_chunks` table populated → repository `is_indexed` = true → progress visible in UI during indexing.
+**Test:** Connect a real repo via GitHub App → vectorization workflow runs → `code_chunks` table populated → repository `is_indexed` = true → progress visible in UI during indexing. Verify Octokit used installation token, not a PAT.
 
 ---
 
@@ -1333,8 +1415,9 @@
 - [ ] Update `.env.example` with every variable
 - [ ] Add a comment above each variable explaining what it is and where to get it
 - [ ] Add setup guides for:
-  - GitHub OAuth App creation
-  - GitHub webhook setup
+  - GitHub App creation + installation guide
+  - GitHub webhook setup (automatic via GitHub App)
+  - ngrok setup for local development
   - Neon PostgreSQL setup
   - Upstash Redis setup
   - Inngest setup
@@ -1404,7 +1487,7 @@
 - [ ] Create `packages/validators/__tests__/workspace.test.ts`
   - Test `createWorkspace` schema: valid name passes, slug with spaces fails, too-short name fails
 - [ ] Create `packages/validators/__tests__/github.test.ts`
-  - Test `connectRepo` schema: valid PAT format passes, empty token fails
+  - Test `connectRepo` schema: valid installation_id passes, missing installation_id fails
 - [ ] Create `packages/validators/__tests__/billing.test.ts`
   - Test plan enum: only free/pro/team accepted, invalid plan fails
 

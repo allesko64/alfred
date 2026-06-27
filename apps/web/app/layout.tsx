@@ -1,8 +1,8 @@
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
 import "./globals.css"
-
-const inter = Inter({ subsets: ["latin"] })
+import { ThemeProvider } from "@/components/theme-provider"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { TRPCReactProvider } from "@/lib/trpc/Provider"
 
 export const metadata: Metadata = {
   title: "Alfred — Your AI Delivery Butler",
@@ -15,9 +15,14 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className={inter.className}>
-        {children}
+    <html lang="en" suppressHydrationWarning>
+      <body>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
+          <TRPCReactProvider>
+            <ThemeToggle className="fixed right-4 top-4 z-50" />
+            {children}
+          </TRPCReactProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

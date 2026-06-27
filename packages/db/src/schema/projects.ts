@@ -39,8 +39,7 @@ export const repositories = pgTable(
     name: text("name"),
     defaultBranch: text("default_branch"),
     webhookId: bigint("webhook_id", { mode: "number" }),
-    webhookSecret: text("webhook_secret"),
-    accessToken: text("access_token"),
+    installationId: bigint("installation_id", { mode: "number" }).notNull(),
     isIndexed: boolean("is_indexed").notNull().default(false),
     indexedAt: timestamp("indexed_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -48,5 +47,6 @@ export const repositories = pgTable(
   (table) => [
     index("repositories_workspace_idx").on(table.workspaceId),
     index("repositories_github_repo_id_idx").on(table.githubRepoId),
+    index("repositories_installation_id_idx").on(table.installationId),
   ],
 );

@@ -1,4 +1,5 @@
 import {
+  boolean,
   pgTable,
   text,
   timestamp,
@@ -9,6 +10,7 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   name: text("name"),
+  emailVerified: boolean("email_verified").notNull().default(false),
   avatarUrl: text("avatar_url"),
   githubUsername: text("github_username").unique(),
   githubAccessToken: text("github_access_token"),
@@ -53,4 +55,5 @@ export const verificationTokens = pgTable("verification_tokens", {
   value: text("value").notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
