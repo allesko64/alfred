@@ -122,7 +122,7 @@ export function Sidebar({ workspaceId }: { workspaceId: string }) {
           render={
             <button
               type="button"
-              className="mx-3 flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-left text-xs hover:bg-muted"
+              className="mx-3 flex items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-left text-xs hover:bg-muted/70"
             />
           }
         >

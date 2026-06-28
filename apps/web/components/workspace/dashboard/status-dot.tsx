@@ -26,10 +26,10 @@ const STATUS_META: Record<string, StatusMeta> = {
   REVIEW_PASSED: { badgeVariant: "secondary", dotColor: "bg-success", pulse: true },
   PENDING_APPROVAL: { badgeVariant: "secondary", dotColor: "bg-primary", pulse: true },
   APPROVED: { badgeVariant: "secondary", dotColor: "bg-success", pulse: true },
-  SHIPPED: { badgeVariant: "default", dotColor: "bg-success", pulse: false },
+  SHIPPED: { badgeVariant: "success", dotColor: "bg-success", pulse: false },
   REJECTED: { badgeVariant: "destructive", dotColor: "bg-destructive", pulse: false },
   OPEN: { badgeVariant: "secondary", dotColor: "bg-primary", pulse: true },
-  MERGED: { badgeVariant: "default", dotColor: "bg-success", pulse: false },
+  MERGED: { badgeVariant: "success", dotColor: "bg-success", pulse: false },
   CLOSED: { badgeVariant: "destructive", dotColor: "bg-destructive", pulse: false },
 }
 

@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
 
 import { useTRPC } from "@/lib/trpc/client"
@@ -26,18 +27,22 @@ export function FeaturePipeline({ workspaceId }: { workspaceId: string }) {
           stages?.map((stage) => {
             const percent = total > 0 ? (stage.count / total) * 100 : 0
             return (
-              <div key={stage.key} className="flex items-center gap-3">
+              <Link
+                key={stage.key}
+                href={`/workspace/${workspaceId}/features?status=${stage.statuses.join(",")}`}
+                className="flex items-center gap-3 hover:opacity-80"
+              >
                 <span className="w-28 shrink-0 text-xs text-foreground">{stage.label}</span>
                 <div className="h-1.5 flex-1 bg-muted">
                   <div
-                    className="h-full bg-primary"
+                    className="h-full bg-foreground/60"
                     style={{ width: `${percent}%` }}
                   />
                 </div>
                 <span className="w-6 shrink-0 text-right text-xs text-muted-foreground">
                   {stage.count}
                 </span>
-              </div>
+              </Link>
             )
           })
         )}

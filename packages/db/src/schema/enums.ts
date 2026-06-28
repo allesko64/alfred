@@ -95,6 +95,7 @@ export const changelogTypeEnum = pgEnum("changelog_type", [
 ]);
 
 export const workflowTypeEnum = pgEnum("workflow_type", [
+  "clarification",
   "prd_generation",
   "task_generation",
   "pr_ingestion",

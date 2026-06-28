@@ -1,8 +1,9 @@
 import { TRPCError } from "@trpc/server";
-import { createFeatureSchema } from "@alfred/validators";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { createFeatureSchema, submitClarificationReplySchema } from "@alfred/validators";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { clarificationMessages, features, users } from "@alfred/db";
+import { clarificationMessages, features, users, workflowRuns } from "@alfred/db";
+import { inngest } from "@alfred/inngest";
 import { createTRPCRouter, workspaceInputSchema, workspaceProcedure } from "../trpc";
 
 const PIPELINE_STAGES = [
@@ -23,8 +24,9 @@ export const featureRouter = createTRPCRouter({
         .values({
           workspaceId: ctx.workspaceId,
           projectId: input.projectId,
-          title: input.title,
-          originalRequest: input.description,
+          title: input.content.slice(0, 60),
+          originalRequest: input.content,
+          status: "CLARIFYING",
           createdBy: ctx.user.id,
         })
         .returning();
@@ -36,10 +38,85 @@ export const featureRouter = createTRPCRouter({
       await ctx.db.insert(clarificationMessages).values({
         featureId: feature.id,
         role: "user",
-        content: input.description,
+        content: input.content,
+      });
+
+      await inngest.send({
+        name: "feature/clarification.requested",
+        data: { featureId: feature.id },
       });
 
       return feature;
+    }),
+
+  submitClarificationReply: workspaceProcedure
+    .input(submitClarificationReplySchema.extend({ workspaceId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [feature] = await ctx.db
+        .select({ id: features.id })
+        .from(features)
+        .where(and(eq(features.id, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
+        .limit(1);
+
+      if (!feature) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      await ctx.db.insert(clarificationMessages).values({
+        featureId: input.featureId,
+        role: "user",
+        content: input.content,
+      });
+
+      await inngest.send({
+        name: "feature/clarification.requested",
+        data: { featureId: input.featureId },
+      });
+
+      return { ok: true };
+    }),
+
+  getClarificationMessages: workspaceProcedure
+    .input(z.object({ workspaceId: z.string().uuid(), featureId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [feature] = await ctx.db
+        .select({ id: features.id })
+        .from(features)
+        .where(and(eq(features.id, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
+        .limit(1);
+
+      if (!feature) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      return ctx.db
+        .select()
+        .from(clarificationMessages)
+        .where(eq(clarificationMessages.featureId, input.featureId))
+        .orderBy(asc(clarificationMessages.createdAt));
+    }),
+
+  getWorkflowProgress: workspaceProcedure
+    .input(z.object({ workspaceId: z.string().uuid(), featureId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [feature] = await ctx.db
+        .select({ id: features.id })
+        .from(features)
+        .where(and(eq(features.id, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
+        .limit(1);
+
+      if (!feature) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      const [run] = await ctx.db
+        .select()
+        .from(workflowRuns)
+        .where(eq(workflowRuns.featureId, input.featureId))
+        .orderBy(desc(workflowRuns.createdAt))
+        .limit(1);
+
+      return run ?? null;
     }),
 
   list: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
@@ -53,17 +130,22 @@ export const featureRouter = createTRPCRouter({
   getById: workspaceProcedure
     .input(z.object({ workspaceId: z.string().uuid(), featureId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      const [feature] = await ctx.db
-        .select()
+      const [row] = await ctx.db
+        .select({
+          feature: features,
+          createdByName: users.name,
+          createdByEmail: users.email,
+        })
         .from(features)
+        .innerJoin(users, eq(users.id, features.createdBy))
         .where(and(eq(features.id, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
         .limit(1);
 
-      if (!feature) {
+      if (!row) {
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
-      return feature;
+      return { ...row.feature, createdByName: row.createdByName, createdByEmail: row.createdByEmail };
     }),
 
   getStatusCounts: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {

@@ -519,7 +519,7 @@
 
 ---
 
-## Phase 4 — Onboarding Flow
+<!-- ## Phase 4 — Onboarding Flow -->
 > Goal: New user → workspace → GitHub connected → ready
 
 ### 4.1 — Onboarding State Tracking ✅
@@ -638,7 +638,7 @@
 
 ---
 
-## Phase 5 — Dashboard
+<!-- ## Phase 5 — Dashboard -->
 > Goal: Post-login dashboard with real data
 
 ### 5.1 — Dashboard Layout

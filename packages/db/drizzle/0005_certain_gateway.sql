@@ -1,0 +1,1 @@
+ALTER TYPE "public"."workflow_type" ADD VALUE 'clarification' BEFORE 'prd_generation';

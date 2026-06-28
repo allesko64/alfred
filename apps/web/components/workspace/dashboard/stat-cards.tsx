@@ -31,7 +31,7 @@ function StatCardValue({ value, color }: { value: number; color?: string }) {
   const display = useCountUp(value)
   return (
     <span
-      className={cn("text-[2.75rem] leading-none font-semibold", !color && "text-primary")}
+      className={cn("text-[2.75rem] leading-none font-semibold", !color && "text-foreground")}
       style={color ? { color } : undefined}
     >
       {display}

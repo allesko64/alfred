@@ -42,7 +42,12 @@ export function GithubActivity({ workspaceId }: { workspaceId: string }) {
             )
           })
         ) : (
-          <span className="text-xs text-muted-foreground">No pull requests yet.</span>
+          <div className="flex flex-col items-center gap-2 py-6 text-center">
+            <GitPullRequestIcon className="size-5 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">
+              No pull requests yet — they&apos;ll land here once Alfred opens one.
+            </span>
+          </div>
         )}
       </CardContent>
     </Card>

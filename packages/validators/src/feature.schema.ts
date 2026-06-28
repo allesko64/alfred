@@ -3,8 +3,7 @@ import { z } from "zod";
 export const createFeatureSchema = z.object({
   workspaceId: z.string().uuid(),
   projectId: z.string().uuid().optional(),
-  title: z.string().min(3, "Title must be at least 3 characters"),
-  description: z.string().min(10, "Describe the request in at least 10 characters"),
+  content: z.string().min(10, "Tell Alfred a bit more about the feature"),
 });
 
 export type CreateFeatureInput = z.infer<typeof createFeatureSchema>;

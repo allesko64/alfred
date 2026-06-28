@@ -1,4 +1,5 @@
 import { and, desc, eq } from "drizzle-orm";
+import { z } from "zod";
 import { notifications } from "@alfred/db";
 import {
   createTRPCRouter,
@@ -24,4 +25,15 @@ export const notificationRouter = createTRPCRouter({
       .orderBy(desc(notifications.createdAt))
       .limit(20);
   }),
+
+  markRead: protectedProcedure
+    .input(z.object({ notificationId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db
+        .update(notifications)
+        .set({ isRead: true })
+        .where(and(eq(notifications.id, input.notificationId), eq(notifications.userId, ctx.user.id)));
+
+      return { ok: true };
+    }),
 });

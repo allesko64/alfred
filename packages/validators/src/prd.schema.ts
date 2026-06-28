@@ -9,8 +9,16 @@ export const createPRDSchema = z.object({
   acceptanceCriteria: z.array(z.string()).default([]),
   edgeCases: z.array(z.string()).default([]),
   successMetrics: z.array(z.string()).default([]),
+  assumptions: z.array(z.string()).default([]),
+  scopeWarning: z.string().nullable().optional(),
   rawContent: z.string().optional(),
   generatedBy: z.string().optional(),
 });
 
 export type CreatePRDInput = z.infer<typeof createPRDSchema>;
+
+export const approvePRDSchema = z.object({
+  featureId: z.string().uuid(),
+});
+
+export type ApprovePRDInput = z.infer<typeof approvePRDSchema>;

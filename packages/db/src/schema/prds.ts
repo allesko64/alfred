@@ -9,6 +9,8 @@ export const clarificationMessages = pgTable("clarification_messages", {
     .references(() => features.id, { onDelete: "cascade" }),
   role: clarificationRoleEnum("role").notNull(),
   content: text("content").notNull(),
+  /** Short multiple-choice options Alfred offered alongside this question, if any. */
+  options: jsonb("options"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -25,6 +27,8 @@ export const prds = pgTable("prds", {
   acceptanceCriteria: jsonb("acceptance_criteria"),
   edgeCases: jsonb("edge_cases"),
   successMetrics: jsonb("success_metrics"),
+  assumptions: jsonb("assumptions"),
+  scopeWarning: text("scope_warning"),
   rawContent: text("raw_content"),
   version: integer("version").notNull().default(1),
   generatedBy: text("generated_by"),

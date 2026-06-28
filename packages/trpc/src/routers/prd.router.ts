@@ -1,8 +1,9 @@
 import { TRPCError } from "@trpc/server";
-import { createPRDSchema } from "@alfred/validators";
+import { approvePRDSchema, createPRDSchema } from "@alfred/validators";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { features, prds } from "@alfred/db";
+import { inngest } from "@alfred/inngest";
 import { createTRPCRouter, workspaceProcedure } from "../trpc";
 
 export const prdRouter = createTRPCRouter({
@@ -47,6 +48,8 @@ export const prdRouter = createTRPCRouter({
           acceptanceCriteria: input.acceptanceCriteria,
           edgeCases: input.edgeCases,
           successMetrics: input.successMetrics,
+          assumptions: input.assumptions,
+          scopeWarning: input.scopeWarning,
           rawContent: input.rawContent,
           generatedBy: input.generatedBy,
         })
@@ -58,5 +61,36 @@ export const prdRouter = createTRPCRouter({
         .where(eq(features.id, input.featureId));
 
       return prd;
+    }),
+
+  approve: workspaceProcedure
+    .input(approvePRDSchema.extend({ workspaceId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [feature] = await ctx.db
+        .select({ id: features.id })
+        .from(features)
+        .where(and(eq(features.id, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
+        .limit(1);
+
+      if (!feature) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      await ctx.db
+        .update(features)
+        .set({
+          status: "TASK_GENERATION",
+          approvedBy: ctx.user.id,
+          approvedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(features.id, input.featureId));
+
+      await inngest.send({
+        name: "feature/task-generation.requested",
+        data: { featureId: input.featureId },
+      });
+
+      return { ok: true };
     }),
 });

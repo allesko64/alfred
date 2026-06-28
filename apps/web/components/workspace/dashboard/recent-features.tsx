@@ -3,10 +3,12 @@
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
 
+import { SparkleIcon } from "@phosphor-icons/react"
+
 import { useTRPC } from "@/lib/trpc/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { formatRelativeTime } from "@/lib/utils"
+import { Timestamp } from "@/components/workspace/timestamp"
 import { StatusBadge } from "@/components/workspace/dashboard/status-dot"
 
 export function RecentFeatures({ workspaceId }: { workspaceId: string }) {
@@ -36,14 +38,22 @@ export function RecentFeatures({ workspaceId }: { workspaceId: string }) {
                 </span>
                 <span className="truncate text-[10px] text-muted-foreground">
                   {feature.createdByName ?? feature.createdByEmail} ·{" "}
-                  {formatRelativeTime(feature.updatedAt)}
+                  <Timestamp date={feature.updatedAt} />
                 </span>
               </div>
               <StatusBadge status={feature.status} className="shrink-0" />
             </Link>
           ))
         ) : (
-          <span className="px-4 text-xs text-muted-foreground">No features yet.</span>
+          <Link
+            href={`/workspace/${workspaceId}/features/new`}
+            className="flex flex-col items-center gap-2 px-4 py-6 text-center hover:text-foreground"
+          >
+            <SparkleIcon className="size-5 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">
+              Describe your first feature and Alfred will take it from here.
+            </span>
+          </Link>
         )}
       </CardContent>
     </Card>

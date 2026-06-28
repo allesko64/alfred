@@ -36,6 +36,20 @@
       "when": 1782626625567,
       "tag": "0004_cultured_thunderbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782646379278,
+      "tag": "0005_certain_gateway",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782664203940,
+      "tag": "0006_worthless_whistler",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@alfred/ai": "workspace:*",
+    "@alfred/db": "workspace:*",
+    "drizzle-orm": "^0.45.2",
     "inngest": "^4.11.0"
   }
 }
