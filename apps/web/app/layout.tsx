@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { ThemeToggle } from "@/components/theme-toggle"
+import { GlobalThemeToggle } from "@/components/global-theme-toggle"
 import { TRPCReactProvider } from "@/lib/trpc/Provider"
 
 export const metadata: Metadata = {
@@ -19,7 +19,7 @@ export default function RootLayout({
       <body>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
           <TRPCReactProvider>
-            <ThemeToggle className="fixed right-4 top-4 z-50" />
+            <GlobalThemeToggle />
             {children}
           </TRPCReactProvider>
         </ThemeProvider>

@@ -1,8 +1,33 @@
+import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { createWorkspaceSchema } from "@alfred/validators";
-import { eq } from "drizzle-orm";
-import { workspaceMemberships, workspaces } from "@alfred/db";
-import { createTRPCRouter, protectedProcedure, workspaceProcedure } from "../trpc";
+import {
+  completeOnboardingStepSchema,
+  createWorkspaceSchema,
+  inviteMemberSchema,
+} from "@alfred/validators";
+import { and, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
+import { features, workspaceInvites, workspaceMemberships, workspaces } from "@alfred/db";
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  requireWorkspaceRole,
+  workspaceInputSchema,
+  workspaceProcedure,
+} from "../trpc";
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Placeholder until Phase 11 (Billing) defines real plan limits.
+const AI_CREDIT_LIMITS: Record<string, number> = { free: 5, pro: 50, team: 200 };
+const ACTIVE_STATUSES = [
+  "CLARIFYING",
+  "PRD_GENERATION",
+  "PRD_READY",
+  "TASK_GENERATION",
+  "PLANNING",
+  "IN_DEVELOPMENT",
+] as const;
+const IN_REVIEW_STATUSES = ["REVIEWING", "RE_REVIEWING"] as const;
 
 export const workspaceRouter = createTRPCRouter({
   create: protectedProcedure
@@ -41,7 +66,7 @@ export const workspaceRouter = createTRPCRouter({
       return workspace;
     }),
 
-  getById: workspaceProcedure.query(async ({ ctx }) => {
+  getById: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
     const [workspace] = await ctx.db
       .select()
       .from(workspaces)
@@ -62,10 +87,120 @@ export const workspaceRouter = createTRPCRouter({
         name: workspaces.name,
         slug: workspaces.slug,
         plan: workspaces.plan,
+        onboardingStep: workspaces.onboardingStep,
         role: workspaceMemberships.role,
       })
       .from(workspaceMemberships)
       .innerJoin(workspaces, eq(workspaces.id, workspaceMemberships.workspaceId))
       .where(eq(workspaceMemberships.userId, ctx.user.id));
   }),
+
+  getDashboardStats: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
+    const [workspace] = await ctx.db
+      .select({ plan: workspaces.plan })
+      .from(workspaces)
+      .where(eq(workspaces.id, ctx.workspaceId))
+      .limit(1);
+
+    if (!workspace) {
+      throw new TRPCError({ code: "NOT_FOUND" });
+    }
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const countFeatures = (extra: SQL) =>
+      ctx.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(features)
+        .where(and(eq(features.workspaceId, ctx.workspaceId), extra))
+        .then(([row]) => row?.count ?? 0);
+
+    const [activeCount, inReviewCount, shippedThisMonthCount, creditsUsedRow] = await Promise.all([
+      countFeatures(inArray(features.status, ACTIVE_STATUSES)),
+      countFeatures(inArray(features.status, IN_REVIEW_STATUSES)),
+      countFeatures(
+        and(
+          eq(features.status, "SHIPPED"),
+          gte(features.shippedAt, monthStart),
+          lt(features.shippedAt, nextMonthStart),
+        )!,
+      ),
+      ctx.db
+        .select({ used: sql<number>`coalesce(sum(${features.aiCreditsUsed}), 0)::int` })
+        .from(features)
+        .where(eq(features.workspaceId, ctx.workspaceId)),
+    ]);
+
+    const aiCreditsLimit = AI_CREDIT_LIMITS[workspace.plan] ?? AI_CREDIT_LIMITS.free!;
+    const aiCreditsUsed = creditsUsedRow[0]?.used ?? 0;
+
+    return {
+      activeFeatures: activeCount,
+      inReview: inReviewCount,
+      shippedThisMonth: shippedThisMonthCount,
+      aiCreditsRemaining: Math.max(aiCreditsLimit - aiCreditsUsed, 0),
+      aiCreditsLimit,
+    };
+  }),
+
+  getOnboardingStatus: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
+    const [workspace] = await ctx.db
+      .select({ onboardingStep: workspaces.onboardingStep })
+      .from(workspaces)
+      .where(eq(workspaces.id, ctx.workspaceId))
+      .limit(1);
+
+    if (!workspace) {
+      throw new TRPCError({ code: "NOT_FOUND" });
+    }
+
+    return workspace;
+  }),
+
+  completeOnboardingStep: workspaceProcedure
+    .input(completeOnboardingStepSchema)
+    .mutation(async ({ ctx, input }) => {
+      const [workspace] = await ctx.db
+        .update(workspaces)
+        .set({ onboardingStep: input.step })
+        .where(eq(workspaces.id, ctx.workspaceId))
+        .returning({ onboardingStep: workspaces.onboardingStep });
+
+      if (!workspace) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      return workspace;
+    }),
+
+  inviteMember: workspaceProcedure
+    .use(requireWorkspaceRole(["owner", "admin"]))
+    .input(inviteMemberSchema)
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.user) {
+        throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
+
+      const [invite] = await ctx.db
+        .insert(workspaceInvites)
+        .values({
+          workspaceId: ctx.workspaceId,
+          invitedBy: ctx.user.id,
+          githubUsername: input.githubUsername,
+          email: input.email,
+          role: input.role,
+          token: randomUUID(),
+          status: "pending",
+          expiresAt: new Date(Date.now() + SEVEN_DAYS_MS),
+        })
+        .returning();
+
+      if (!invite) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      }
+
+      return invite;
+    }),
 });

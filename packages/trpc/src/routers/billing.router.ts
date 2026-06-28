@@ -1,9 +1,9 @@
 import { eq } from "drizzle-orm";
 import { billingSubscriptions, workspaces } from "@alfred/db";
-import { createTRPCRouter, workspaceProcedure } from "../trpc";
+import { createTRPCRouter, workspaceInputSchema, workspaceProcedure } from "../trpc";
 
 export const billingRouter = createTRPCRouter({
-  getSubscription: workspaceProcedure.query(async ({ ctx }) => {
+  getSubscription: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
     const [workspace] = await ctx.db
       .select({ plan: workspaces.plan, billingStatus: workspaces.billingStatus })
       .from(workspaces)

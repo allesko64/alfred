@@ -21,6 +21,7 @@
   /* Borders */
   --border-default: rgba(59, 91, 219, 0.12);
   --border-strong: rgba(59, 91, 219, 0.28);
+  --card-border: rgba(13, 17, 48, 0.08);
 
   /* Text */
   --text-primary: #0D1130;
@@ -109,15 +110,16 @@
 
 .dark {
   /* Backgrounds */
-  --bg-primary: #0D0F1C;
-  --bg-secondary: #111328;
-  --bg-hero: #060810;
-  --surface: #171A30;
-  --surface-raised: #1C2038;
+  --bg-primary: #090909;
+  --bg-secondary: #111111;
+  --bg-hero: #050505;
+  --surface: #1A1A1A;
+  --surface-raised: #202020;
 
   /* Borders */
-  --border-default: rgba(107, 130, 255, 0.15);
-  --border-strong: rgba(107, 130, 255, 0.32);
+  --border-default: rgba(0, 117, 222, 0.15);
+  --border-strong: rgba(0, 117, 222, 0.32);
+  --card-border: rgba(255, 255, 255, 0.06);
 
   /* Text */
   --text-primary: #E8ECFF;
@@ -125,12 +127,12 @@
   --text-muted: #4A5280;
 
   /* Accent — lighter on dark for contrast */
-  --accent-color: #6B87FF;
-  --accent-hover: #5A74F0;
-  --accent-active: #4A63DE;
-  --accent-tint: rgba(107, 135, 255, 0.14);
-  --accent-text: #A0B4FF;
-  --border-accent: rgba(107, 135, 255, 0.32);
+  --accent-color: #0075DE;
+  --accent-hover: #338FE6;
+  --accent-active: #005FBA;
+  --accent-tint: rgba(0, 117, 222, 0.14);
+  --accent-text: #4FA3F0;
+  --border-accent: rgba(0, 117, 222, 0.32);
 
   /* Semantic — same hues, lighter stops */
   --success-color: #22C55E;
@@ -181,6 +183,7 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
+  --color-card-border: var(--card-border);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-success: var(--success);
@@ -193,6 +196,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --animate-cell-ripple: cell-ripple var(--duration, 200ms) ease-out var(--delay, 0ms);
 }
 
 @layer base {
@@ -411,4 +415,105 @@
 
 .theme-toggle-transition {
   transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+}
+
+/* ==========================================================================
+   Landing page — Alfred's heartbeat pulse (navbar logo dot)
+   ========================================================================== */
+
+@keyframes alfred-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* ==========================================================================
+   Landing page — background ripple effect (grid cell click ripple)
+   ========================================================================== */
+
+@keyframes cell-ripple {
+  0% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0px 0px 30px 1px var(--cell-shadow-color);
+  }
+  100% {
+    opacity: 0.4;
+  }
+}
+
+/* ==========================================================================
+   Dashboard — subtle CTA shimmer (New Feature button)
+   ========================================================================== */
+
+@keyframes button-shimmer {
+  0% {
+    transform: translateX(-150%);
+  }
+  100% {
+    transform: translateX(150%);
+  }
+}
+
+.btn-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.25) 50%,
+    transparent 65%
+  );
+  transform: translateX(-150%);
+  animation: button-shimmer 3.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Dashboard — status dot heartbeat (active statuses)
+   ========================================================================== */
+
+@keyframes status-dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
+}
+
+.status-dot-pulse {
+  animation: status-dot-pulse 1.6s ease-in-out infinite;
+}
+
+/* ==========================================================================
+   Dashboard — activity feed "new" highlight fade
+   ========================================================================== */
+
+@keyframes activity-new-fade {
+  0% {
+    border-left-color: var(--accent-color);
+  }
+  100% {
+    border-left-color: transparent;
+  }
+}
+
+.activity-new {
+  animation: activity-new-fade 3s ease-out forwards;
 }

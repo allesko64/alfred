@@ -381,7 +381,7 @@
 
 ---
 
-## Phase 2 — Authentication
+<!-- ## Phase 2 — Authentication -->
 > Goal: Full auth flow working — signup, login, OAuth, sessions
 
 ### 2.1 — Install & Configure BetterAuth
@@ -448,7 +448,7 @@
 
 ---
 
-## Phase 3 — tRPC Setup & Core Middleware
+<!-- ## Phase 3 — tRPC Setup & Core Middleware -->
 > Goal: Type-safe API layer with auth + permission middleware
 
 ### 3.1 — tRPC Base Setup
@@ -522,28 +522,31 @@
 ## Phase 4 — Onboarding Flow
 > Goal: New user → workspace → GitHub connected → ready
 
-### 4.1 — Onboarding State Tracking
-- [ ] Add `onboarding_step` field to `workspaces` table (enum: workspace/github/team/complete)
-- [ ] Create tRPC procedure: `workspace.getOnboardingStatus`
-- [ ] Create tRPC procedure: `workspace.completeOnboardingStep`
-- [ ] Add redirect logic: if onboarding incomplete → send to onboarding page
+### 4.1 — Onboarding State Tracking ✅
+- [x] Add `onboarding_step` field to `workspaces` table (enum: `team`/`complete` — workspace/github steps collapsed into one page, see 4.2)
+- [x] Create tRPC procedure: `workspace.getOnboardingStatus`
+- [x] Create tRPC procedure: `workspace.completeOnboardingStep`
+- [x] Add redirect logic: `/dashboard` checks workspace count + onboardingStep and routes accordingly
 
 **Test:** Create a workspace → onboarding_step is "github". Complete GitHub step → onboarding_step is "team". Complete team → "complete".
 
 ---
 
-### 4.2 — Create Workspace Step (UI)
-- [ ] Create `/onboarding/workspace` page
-- [ ] Form: workspace name + what are you building (dropdown)
-- [ ] On submit: call `workspace.create` tRPC procedure
-- [ ] Procedure creates workspace + adds user as owner in membership table
-- [ ] On success: redirect to GitHub step
+### 4.2 — Create Workspace Step (UI) ✅
+> Deviation from plan: merged with 4.3 per final decision — one page collects the
+> form, then "Connect GitHub" drives the GitHub App install, and the workspace
+> isn't created in the DB until that round-trip returns (avoids orphan rows).
+- [x] Create `/onboarding/workspace` page
+- [x] Form: workspace name + what are you building (dropdown)
+- [x] On submit: call `github.completeWorkspaceOnboarding` tRPC procedure (not `workspace.create` — see deviation note)
+- [x] Procedure creates workspace + adds user as owner in membership table (+ default project + repo, in one transaction)
+- [x] On success: redirect to team step
 
 **Test:** Submit form → workspace row in DB → membership row in DB with role "owner" → redirected to next step.
 
 ---
 
-### 4.2.1 — Create GitHub App (One-Time Setup)
+### 4.2.1 — Create GitHub App (One-Time Setup) ✅
 > Do this BEFORE building the connect GitHub UI
 
 - [ ] Go to `github.com/settings/apps → New GitHub App`
@@ -575,7 +578,8 @@
 
 ---
 
-### 4.2.2 — Setup ngrok for Local Webhook Testing
+### 4.2.2 — Setup ngrok for Local Webhook Testing — deferred
+> Tried, reverted to localhost-only for now (no public tunnel needed until Phase 8 webhooks).
 - [ ] Install ngrok: `npm install -g ngrok` or download from ngrok.com
 - [ ] Create free ngrok account at ngrok.com
 - [ ] Add your auth token: `ngrok config add-authtoken YOUR_TOKEN`
@@ -591,49 +595,44 @@
 
 ---
 
-### 4.3 — Connect GitHub Step (UI + API)
-- [ ] Create `/onboarding/github` page
-- [ ] Single clear CTA: "Install Alfred on GitHub" button
-- [ ] Button links to GitHub App installation URL:
-  `https://github.com/apps/alfred/installations/new`
-- [ ] Create GitHub App callback handler:
-  `apps/web/app/api/github/callback/route.ts`
-  - Receives: `installation_id` + `setup_action` from GitHub
-  - Exchanges code for installation token via `@octokit/auth-app`
-  - Fetches list of installed repositories via Octokit
-  - Saves each repo to `repositories` table with `installation_id`
-  - Registers workspace ↔ installation mapping
+### 4.3 — Connect GitHub Step (UI + API) ✅
+> Deviation: no separate `/onboarding/github` page — "Connect GitHub" button lives
+> on the workspace page (4.2) per final decision. No repo-picker screen either
+> (not in the literal UI spec given) — first repo from the installation is used
+> automatically; `githubRepoId` stays optional in the schema if a picker is added later.
+- [x] ~~Create `/onboarding/github` page~~ — merged into `/onboarding/workspace`
+- [x] "Connect GitHub" button (disabled + tooltip until workspace name filled)
+- [x] Button fetches the install URL via `github.getInstallationUrl` (uses `app.getInstallationUrl()`, no hardcoded app slug needed)
+- [x] Create GitHub App callback handler: `apps/web/app/api/github/callback/route.ts`
+  - Receives `installation_id` + `setup_action` + `state`, forwards to the client (form data lives in localStorage, not server-side)
+  - Installation token handled by `@octokit/app` per-call, not exchanged/stored
+  - Repo fetched + saved via `github.completeWorkspaceOnboarding` tRPC mutation
+  - Workspace ↔ installation mapping stored on the `repositories` row (`installation_id`)
   - Redirects to onboarding team step
-- [ ] Install required packages:
-  ```bash
-  pnpm add @octokit/app @octokit/auth-app @octokit/rest
-  ```
-- [ ] Create Octokit App instance in `packages/ai/src/github.ts`:
-  - Initialized with: App ID + Private Key
-  - Used for ALL GitHub API calls throughout the app
-  - Creates installation-specific Octokit client per request
-- [ ] Show installed repos on the connect page after installation:
-  - List of repos Alfred now has access to
-  - Green checkmarks next to each
-  - "Add more repos" button → reinstall flow
-- [ ] Fire Inngest `repo-vectorization` event for each connected repo
+- [x] Installed required packages: `@octokit/app @octokit/auth-app @octokit/rest`
+- [x] Create Octokit App instance in `packages/ai/src/github.ts`
+  - Initialized with App ID + Private Key + OAuth client id/secret
+  - `Octokit` class overridden to `@octokit/rest`'s (the bare `@octokit/core` client `@octokit/app` uses by default has no `.apps`/`.paginate` methods — found and fixed this bug during testing)
+  - `getInstallationOctokit()` / `listInstallationRepositories()` used for ALL installation-scoped calls
+- [ ] Show installed repos / green checkmarks / "Add more repos" button — not built (no picker screen per current scope)
+- [x] Fire Inngest `repo-vectorization.requested` event after connecting the repo (best-effort — wrapped in try/catch since Inngest isn't configured yet; was causing false 500s otherwise)
 
-**Test:** Click "Install Alfred on GitHub" → GitHub permission screen → select repos → redirected back to Alfred → repos appear in `repositories` table with `installation_id` → webhook automatically appears in GitHub repo settings → Inngest vectorization fires.
+**Test:** Click "Connect GitHub" → GitHub install screen → select repos → redirected back to Alfred → repo appears in `repositories` table with `installation_id`. Inngest event fires (or fails silently, logged, until Phase 13).
 
 ---
 
-### 4.4 — Invite Team Step (UI)
-- [ ] Create `/onboarding/team` page
-- [ ] Input: GitHub username OR email
-- [ ] On GitHub username input:
-  - Call `github.lookupUser` tRPC procedure
-  - Fetch profile via Octokit (`GET /users/{username}`)
-  - Show avatar card preview
-- [ ] Role selector dropdown
-- [ ] Add to pending list (not saved yet)
-- [ ] On "Continue": save all invites to `workspace_invites` table
-- [ ] Send invite email via Resend (or skip email for now, save to DB)
-- [ ] "Skip for now" button → mark onboarding complete
+### 4.4 — Invite Team Step (UI) ✅
+- [x] Create `/onboarding/team` page
+- [x] Input: GitHub username (email path not built — username-only per current UI spec)
+- [x] On GitHub username input:
+  - Call `github.lookupUser` tRPC procedure (500ms debounce)
+  - Fetch profile via unauthenticated Octokit (`GET /users/{username}` — found and fixed a bug where this went through App-level auth and always 0% succeeded)
+  - Show avatar card preview, fade-in
+- [x] Role selector dropdown (Admin/Developer/Reviewer/Viewer)
+- [x] Add to pending list (not saved yet)
+- [x] On "Continue": save all invites via `workspace.inviteMember` (looped), then `workspace.completeOnboardingStep` (step: complete)
+- [ ] Send invite email via Resend — not built (Phase 12/Resend not wired up yet); invites just save to DB with status "pending"
+- [x] "Skip for now" button → same finalize path, marks onboarding complete
 
 **Test:** Type a real GitHub username → profile card appears with avatar. Add them → invite row in DB with status "pending". Skip → onboarding_step = "complete".
 

@@ -6,7 +6,13 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { billingStatusEnum, membershipRoleEnum, membershipStatusEnum, workspacePlanEnum } from "./enums";
+import {
+  billingStatusEnum,
+  membershipRoleEnum,
+  membershipStatusEnum,
+  onboardingStepEnum,
+  workspacePlanEnum,
+} from "./enums";
 import { users } from "./users";
 
 export const workspaces = pgTable("workspaces", {
@@ -18,6 +24,8 @@ export const workspaces = pgTable("workspaces", {
     .references(() => users.id),
   plan: workspacePlanEnum("plan").notNull().default("free"),
   billingStatus: billingStatusEnum("billing_status").notNull().default("active"),
+  onboardingStep: onboardingStepEnum("onboarding_step").notNull().default("team"),
+  buildingType: text("building_type"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

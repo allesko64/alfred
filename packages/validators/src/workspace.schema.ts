@@ -9,3 +9,12 @@ export const createWorkspaceSchema = z.object({
 });
 
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;
+
+export const onboardingStepSchema = z.enum(["team", "complete"]);
+
+export const completeOnboardingStepSchema = z.object({
+  workspaceId: z.string().uuid(),
+  step: onboardingStepSchema,
+});
+
+export type CompleteOnboardingStepInput = z.infer<typeof completeOnboardingStepSchema>;

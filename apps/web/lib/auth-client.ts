@@ -1,7 +1,7 @@
 import { createAuthClient } from "better-auth/react";
 
-export const authClient = createAuthClient({
-  baseURL: process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? "http://localhost:3000",
-});
+// No baseURL: requests stay same-origin so this works whether the app is
+// opened via localhost or the ngrok tunnel, without hardcoding either.
+export const authClient = createAuthClient();
 
 export const { signIn, signUp, signOut, useSession } = authClient;

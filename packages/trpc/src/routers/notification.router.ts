@@ -1,6 +1,11 @@
 import { and, desc, eq } from "drizzle-orm";
 import { notifications } from "@alfred/db";
-import { createTRPCRouter, protectedProcedure, workspaceProcedure } from "../trpc";
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  workspaceInputSchema,
+  workspaceProcedure,
+} from "../trpc";
 
 export const notificationRouter = createTRPCRouter({
   getUnread: protectedProcedure.query(async ({ ctx }) => {
@@ -11,7 +16,7 @@ export const notificationRouter = createTRPCRouter({
       .orderBy(desc(notifications.createdAt));
   }),
 
-  getWorkspaceActivity: workspaceProcedure.query(async ({ ctx }) => {
+  getWorkspaceActivity: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
     return ctx.db
       .select()
       .from(notifications)

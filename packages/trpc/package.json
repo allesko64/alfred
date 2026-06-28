@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@alfred/ai": "workspace:*",
     "@alfred/db": "workspace:*",
+    "@alfred/inngest": "workspace:*",
     "@alfred/validators": "workspace:*",
     "@trpc/server": "^11.18.0",
     "@upstash/redis": "^1.38.0",

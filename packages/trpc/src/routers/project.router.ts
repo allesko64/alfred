@@ -3,7 +3,7 @@ import { createProjectSchema } from "@alfred/validators";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { projects } from "@alfred/db";
-import { createTRPCRouter, workspaceProcedure } from "../trpc";
+import { createTRPCRouter, workspaceInputSchema, workspaceProcedure } from "../trpc";
 
 export const projectRouter = createTRPCRouter({
   create: workspaceProcedure
@@ -22,7 +22,7 @@ export const projectRouter = createTRPCRouter({
       return project;
     }),
 
-  list: workspaceProcedure.query(async ({ ctx }) => {
+  list: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
     return ctx.db.select().from(projects).where(eq(projects.workspaceId, ctx.workspaceId));
   }),
 

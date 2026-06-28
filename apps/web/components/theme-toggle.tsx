@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react"
 import { useTheme } from "next-themes"
 import { MoonIcon, SunIcon } from "@phosphor-icons/react"
 
-import { Button } from "@/components/ui/button"
+import { Button, type buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import type { VariantProps } from "class-variance-authority"
 
 type ViewTransitionDocument = Document & {
   startViewTransition?: (callback: () => void) => {
@@ -13,7 +14,13 @@ type ViewTransitionDocument = Document & {
   }
 }
 
-export function ThemeToggle({ className }: { className?: string }) {
+export function ThemeToggle({
+  className,
+  size = "icon",
+}: {
+  className?: string
+  size?: VariantProps<typeof buttonVariants>["size"]
+}) {
   const { resolvedTheme, setTheme } = useTheme()
   const buttonRef = useRef<HTMLButtonElement>(null)
   const [mounted, setMounted] = useState(false)
@@ -66,7 +73,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       ref={buttonRef}
       type="button"
       variant="ghost"
-      size="icon"
+      size={size}
       aria-label="Toggle theme"
       onClick={toggleTheme}
       className={cn("theme-toggle-transition", className)}

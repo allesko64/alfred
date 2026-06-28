@@ -8,6 +8,7 @@ export {
   protectedProcedure,
   workspaceProcedure,
   requireWorkspaceRole,
+  workspaceInputSchema,
 } from "./trpc";
 export {
   getMembershipRole,

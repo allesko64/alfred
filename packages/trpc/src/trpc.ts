@@ -34,7 +34,7 @@ const isAuthed = middleware(({ ctx, next }) => {
 /** Requires a valid session. */
 export const protectedProcedure = publicProcedure.use(isAuthed);
 
-const workspaceInputSchema = z.object({ workspaceId: z.string().uuid() });
+export const workspaceInputSchema = z.object({ workspaceId: z.string().uuid() });
 
 const hasWorkspaceMembership = middleware(async ({ ctx, getRawInput, next }) => {
   if (!ctx.user) {

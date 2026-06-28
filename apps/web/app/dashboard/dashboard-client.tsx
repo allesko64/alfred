@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,6 +14,28 @@ export function DashboardClient() {
   const trpc = useTRPC()
 
   const { data: hello } = useQuery(trpc.user.hello.queryOptions({ name: session?.user.name ?? undefined }))
+  const { data: workspaces, isPending: isWorkspacesPending } = useQuery(trpc.workspace.list.queryOptions())
+
+  useEffect(() => {
+    if (isWorkspacesPending || !workspaces) return
+
+    if (workspaces.length === 0) {
+      router.replace("/onboarding/workspace")
+      return
+    }
+
+    if (workspaces.length > 1) {
+      router.replace("/workspaces")
+      return
+    }
+
+    const workspace = workspaces[0]!
+    if (workspace.onboardingStep === "complete") {
+      router.replace(`/workspace/${workspace.id}/dashboard`)
+    } else {
+      router.replace(`/onboarding/${workspace.onboardingStep}`)
+    }
+  }, [workspaces, isWorkspacesPending, router])
 
   const onSignOut = async () => {
     await signOut()

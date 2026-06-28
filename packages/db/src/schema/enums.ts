@@ -26,6 +26,11 @@ export const membershipStatusEnum = pgEnum("membership_status", [
   "pending",
 ]);
 
+export const onboardingStepEnum = pgEnum("onboarding_step", [
+  "team",
+  "complete",
+]);
+
 export const featureStatusEnum = pgEnum("feature_status", [
   "DRAFT",
   "CLARIFYING",

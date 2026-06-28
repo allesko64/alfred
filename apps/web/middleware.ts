@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { getSessionCookie } from "better-auth/cookies"
 
-const PROTECTED_PREFIXES = ["/dashboard", "/workspace"]
+const PROTECTED_PREFIXES = ["/dashboard", "/workspace", "/onboarding"]
 const AUTH_PAGES = ["/login", "/signup"]
 
 export function middleware(request: NextRequest) {
@@ -27,5 +27,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/workspace/:path*", "/login", "/signup"],
+  matcher: ["/dashboard/:path*", "/workspace/:path*", "/onboarding/:path*", "/login", "/signup"],
 }

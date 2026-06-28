@@ -1,0 +1,1 @@
+ALTER TABLE "workspaces" ADD COLUMN "building_type" text;
