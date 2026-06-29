@@ -6,7 +6,7 @@ import {
   inviteMemberSchema,
 } from "@alfred/validators";
 import { and, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
-import { features, users, workspaceInvites, workspaceMemberships, workspaces } from "@alfred/db";
+import { checkBillingLimit, features, users, workspaceInvites, workspaceMemberships, workspaces } from "@alfred/db";
 import {
   createTRPCRouter,
   protectedProcedure,
@@ -17,7 +17,7 @@ import {
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-// Placeholder until Phase 11 (Billing) defines real plan limits.
+// Dashboard "AI credits" stat — distinct from the hard plan-gate counts in checkBillingLimit.
 const AI_CREDIT_LIMITS: Record<string, number> = { free: 5, pro: 50, team: 200 };
 const ACTIVE_STATUSES = [
   "CLARIFYING",
@@ -189,6 +189,14 @@ export const workspaceRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       if (!ctx.user) {
         throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
+
+      const limit = await checkBillingLimit(ctx.workspaceId, "members");
+      if (!limit.allowed) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You've reached your free plan limit. Upgrade to Pro.",
+        });
       }
 
       const [invite] = await ctx.db

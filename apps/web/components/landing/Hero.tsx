@@ -3,17 +3,27 @@
 import { useEffect, useState } from "react"
 import { motion, useReducedMotion } from "framer-motion"
 import Link from "next/link"
+import { Ear, Wand2, Map as MapIcon, ShieldCheck, Rocket } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LayoutTextFlip } from "@/components/ui/layout-text-flip"
 import { BackgroundRippleEffect } from "@/components/ui/background-ripple-effect"
+import { AnimatedTooltip } from "@/components/ui/animated-tooltip"
 
 const PHASES = [
-  { word: "Listens", color: "#F59E0B" },
-  { word: "Crafts", color: "#38BDF8" },
-  { word: "Maps", color: "#A78BFA" },
-  { word: "Audits", color: "#FB923C" },
-  { word: "Ships", color: "#34D399" },
+  { word: "Listens", color: "#F59E0B", icon: Ear, designation: "Understands your requirements" },
+  { word: "Crafts", color: "#38BDF8", icon: Wand2, designation: "Drafts the product spec" },
+  { word: "Maps", color: "#A78BFA", icon: MapIcon, designation: "Plans the implementation" },
+  { word: "Audits", color: "#FB923C", icon: ShieldCheck, designation: "Reviews for quality & risk" },
+  { word: "Ships", color: "#34D399", icon: Rocket, designation: "Deploys to production" },
 ] as const
+
+const TOOLTIP_ITEMS = PHASES.map((p, index) => ({
+  id: index + 1,
+  name: p.word,
+  designation: p.designation,
+  icon: p.icon,
+  color: p.color,
+}))
 
 const ROTATION_INTERVAL_MS = 2800
 
@@ -63,7 +73,11 @@ export function Hero() {
       />
 
       <div className="relative max-w-4xl mx-auto px-6 flex flex-col items-center text-center pt-24 pb-16">
-        
+
+        <FadeIn delay={0.0} className="flex flex-row items-center justify-center mt-4">
+          <AnimatedTooltip items={TOOLTIP_ITEMS} />
+        </FadeIn>
+
         <FadeIn delay={0.1} className="mt-8">
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold leading-tight tracking-tight text-foreground flex flex-wrap items-center justify-center gap-x-3 gap-y-3">
             <span>Describe what you want. Alfred</span>

@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -126,19 +127,21 @@ export function Sidebar({ workspaceId }: { workspaceId: string }) {
           <CaretDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56">
-          <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
-          {workspaces?.map((workspace) => (
-            <DropdownMenuItem
-              key={workspace.id}
-              onClick={() => router.push(`/workspace/${workspace.id}/dashboard`)}
-              className="justify-between"
-            >
-              <span className="truncate">{workspace.name}</span>
-              <Badge variant="secondary" className="capitalize">
-                {workspace.plan}
-              </Badge>
-            </DropdownMenuItem>
-          ))}
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+            {workspaces?.map((workspace) => (
+              <DropdownMenuItem
+                key={workspace.id}
+                onClick={() => router.push(`/workspace/${workspace.id}/dashboard`)}
+                className="justify-between"
+              >
+                <span className="truncate">{workspace.name}</span>
+                <Badge variant="secondary" className="capitalize">
+                  {workspace.plan}
+                </Badge>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => router.push("/onboarding/workspace")}>
             <PlusIcon />

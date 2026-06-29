@@ -15,6 +15,7 @@ import {
 import { and, desc, eq, isNull } from "drizzle-orm";
 import {
   aiReviews,
+  checkBillingLimit,
   codeChunks,
   features,
   projects,
@@ -35,8 +36,6 @@ import {
   workspaceInputSchema,
   workspaceProcedure,
 } from "../trpc";
-
-const FREE_PLAN_REPO_LIMIT = 1;
 
 function slugify(name: string): string {
   const base = name
@@ -259,24 +258,12 @@ export const githubRouter = createTRPCRouter({
   connectRepository: workspaceProcedure
     .input(connectRepositorySchema)
     .mutation(async ({ ctx, input }) => {
-      const [workspace] = await ctx.db
-        .select({ plan: workspaces.plan })
-        .from(workspaces)
-        .where(eq(workspaces.id, ctx.workspaceId))
-        .limit(1);
-
-      if (workspace?.plan === "free") {
-        const existingRepos = await ctx.db
-          .select({ id: repositories.id })
-          .from(repositories)
-          .where(and(eq(repositories.workspaceId, ctx.workspaceId), isNull(repositories.disconnectedAt)));
-
-        if (existingRepos.length >= FREE_PLAN_REPO_LIMIT) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Free plan is limited to 1 connected repository. Upgrade to connect more.",
-          });
-        }
+      const limit = await checkBillingLimit(ctx.workspaceId, "repos");
+      if (!limit.allowed) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You've reached your free plan limit. Upgrade to Pro.",
+        });
       }
 
       const installedRepos = await listInstallationRepositories(input.installationId);

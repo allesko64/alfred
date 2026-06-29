@@ -3,22 +3,23 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { BellIcon, MagnifyingGlassIcon, PlusIcon } from "@phosphor-icons/react"
+import { BellIcon, PlusIcon } from "@phosphor-icons/react"
 
 import { useTRPC } from "@/lib/trpc/client"
 import { cn, formatRelativeTime } from "@/lib/utils"
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { SearchPalette } from "@/components/workspace/search-palette"
 
 export function TopBar({ title, workspaceId }: { title: string; workspaceId: string }) {
   const trpc = useTRPC()
@@ -57,10 +58,7 @@ export function TopBar({ title, workspaceId }: { title: string; workspaceId: str
     <div className="flex h-16 items-center gap-4 border-b border-border px-6">
       <h1 className="w-48 shrink-0 text-xl font-semibold text-foreground">{title}</h1>
 
-      <div className="relative mx-auto w-full max-w-md">
-        <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input placeholder="Search features, tasks, PRs..." className="pl-8" disabled />
-      </div>
+      <SearchPalette workspaceId={workspaceId} />
 
       <div className="flex shrink-0 items-center gap-3">
         <DropdownMenu>
@@ -84,7 +82,9 @@ export function TopBar({ title, workspaceId }: { title: string; workspaceId: str
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
             <div className="flex items-center justify-between px-2 py-1.5">
-              <DropdownMenuLabel className="p-0">Notifications</DropdownMenuLabel>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="p-0">Notifications</DropdownMenuLabel>
+              </DropdownMenuGroup>
               {unreadCount > 0 && (
                 <button
                   type="button"

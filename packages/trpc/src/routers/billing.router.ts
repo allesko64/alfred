@@ -1,6 +1,14 @@
+import { TRPCError } from "@trpc/server";
+import { type BillingLimitType, billingSubscriptions, checkBillingLimit, workspaces } from "@alfred/db";
 import { eq } from "drizzle-orm";
-import { billingSubscriptions, workspaces } from "@alfred/db";
-import { createTRPCRouter, workspaceInputSchema, workspaceProcedure } from "../trpc";
+import { z } from "zod";
+import { createTRPCRouter, requireWorkspaceRole, workspaceInputSchema, workspaceProcedure } from "../trpc";
+import { getRazorpayClient, getRazorpayPlanId, type PaidPlan } from "../lib/razorpay";
+
+const USAGE_TYPES: BillingLimitType[] = ["features", "prd_generations", "ai_reviews", "repos", "members"];
+
+/** Razorpay subscriptions require a fixed total_count — 12 monthly cycles, renewed by re-subscribing. */
+const SUBSCRIPTION_TOTAL_COUNT = 12;
 
 export const billingRouter = createTRPCRouter({
   getSubscription: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
@@ -18,4 +26,67 @@ export const billingRouter = createTRPCRouter({
 
     return { workspace, subscription: subscription ?? null };
   }),
+
+  /** Usage vs. free-plan limits for every gated resource — drives the billing page's usage meters. */
+  getUsage: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
+    const results = await Promise.all(USAGE_TYPES.map((type) => checkBillingLimit(ctx.workspaceId, type)));
+    return Object.fromEntries(USAGE_TYPES.map((type, i) => [type, results[i]]));
+  }),
+
+  /** Creates (or reuses) a Razorpay customer + subscription and returns the hosted checkout URL. */
+  createCheckoutSession: workspaceProcedure
+    .use(requireWorkspaceRole(["owner", "admin"]))
+    .input(workspaceInputSchema.extend({ plan: z.enum(["pro", "team"]) }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.user) {
+        throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
+
+      const plan = input.plan as PaidPlan;
+      const razorpay = getRazorpayClient();
+
+      const [existing] = await ctx.db
+        .select({ razorpayCustomerId: billingSubscriptions.razorpayCustomerId })
+        .from(billingSubscriptions)
+        .where(eq(billingSubscriptions.workspaceId, ctx.workspaceId))
+        .limit(1);
+
+      const customerId =
+        existing?.razorpayCustomerId ??
+        (
+          await razorpay.customers.create({
+            name: ctx.user.name ?? ctx.user.email,
+            email: ctx.user.email,
+            notes: { workspaceId: ctx.workspaceId },
+          })
+        ).id;
+
+      const subscription = await razorpay.subscriptions.create({
+        plan_id: getRazorpayPlanId(plan),
+        customer_notify: 1,
+        total_count: SUBSCRIPTION_TOTAL_COUNT,
+        notes: { workspaceId: ctx.workspaceId, plan },
+      });
+
+      await ctx.db
+        .insert(billingSubscriptions)
+        .values({
+          workspaceId: ctx.workspaceId,
+          razorpaySubscriptionId: subscription.id,
+          razorpayCustomerId: customerId,
+          plan,
+          status: "trialing",
+        })
+        .onConflictDoUpdate({
+          target: billingSubscriptions.workspaceId,
+          set: { razorpaySubscriptionId: subscription.id, razorpayCustomerId: customerId, plan, status: "trialing" },
+        });
+
+      const checkoutUrl = subscription.short_url;
+      if (!checkoutUrl) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Razorpay did not return a checkout URL" });
+      }
+
+      return { checkoutUrl };
+    }),
 });

@@ -1,5 +1,5 @@
 import { chatCompleteJSON, getLLMModel } from "@alfred/ai";
-import { clarificationMessages, db, features, notifications, prds } from "@alfred/db";
+import { checkBillingLimit, clarificationMessages, db, features, notifications, prds } from "@alfred/db";
 import { asc, eq } from "drizzle-orm";
 import type { InngestFunction } from "inngest";
 import { inngest } from "../client";
@@ -185,6 +185,32 @@ const _prdGenerationWorkflow = inngest.createFunction(
 
       return { feature, messages };
     });
+
+    const billingCheck = await step.run("check-billing-limit", async () =>
+      checkBillingLimit(feature.workspaceId, "prd_generations"),
+    );
+
+    if (!billingCheck.allowed) {
+      await step.run("save-billing-block", async () => {
+        await db.insert(notifications).values({
+          userId: feature.createdBy,
+          workspaceId: feature.workspaceId,
+          type: "prd_blocked",
+          title: "PRD generation blocked",
+          message: "Free plan PRD generation limit reached. Upgrade to Pro to continue.",
+          featureId,
+        });
+
+        await reportWorkflowProgress(featureId, "prd_generation", {
+          status: "failed",
+          progressMessage: "PRD generation blocked — plan limit reached",
+          progressPercent: 100,
+          errorMessage: "Free plan PRD generation limit reached. Upgrade to Pro to continue.",
+        });
+      });
+
+      return { status: "blocked", reason: "billing_limit" };
+    }
 
     await step.run("report-writing-progress", async () => {
       await reportWorkflowProgress(featureId, "prd_generation", {

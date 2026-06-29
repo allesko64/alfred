@@ -1,6 +1,7 @@
 import { chatCompleteJSON, cosineSimilarity, embedTexts, getLLMModel, upsertPullRequestComment } from "@alfred/ai";
 import {
   aiReviews,
+  checkBillingLimit,
   codeChunks,
   db,
   features,
@@ -502,6 +503,29 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
       });
     });
     return { status: "blocked", reason: "no_prd" };
+  }
+
+  const billingCheck = await run("check-billing-limit", async () => checkBillingLimit(feature.workspaceId, "ai_reviews"));
+
+  if (!billingCheck.allowed) {
+    await run("save-billing-block", async () => {
+      await reportWorkflowProgress(featureId, workflowType, {
+        status: "failed",
+        progressMessage: "Review blocked — plan limit reached",
+        progressPercent: 100,
+        errorMessage: "Free plan AI review limit reached. Upgrade to Pro to continue.",
+      });
+
+      await db.insert(notifications).values({
+        userId: feature.createdBy,
+        workspaceId: feature.workspaceId,
+        type: "review_blocked",
+        title: "AI review blocked",
+        message: "Free plan AI review limit reached. Upgrade to Pro to continue.",
+        featureId,
+      });
+    });
+    return { status: "blocked", reason: "billing_limit" };
   }
 
   const reviewNumber = (previousReview?.reviewNumber ?? 0) + 1;

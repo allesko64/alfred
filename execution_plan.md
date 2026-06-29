@@ -1139,47 +1139,45 @@
 > Goal: Razorpay integration with real feature gating
 
 ### 11.1 — Razorpay Setup
-- [ ] Create Razorpay account
-- [ ] Create 2 plans in Razorpay dashboard: Pro (₹999/mo) and Team (₹2999/mo)
-- [ ] Install Razorpay SDK
-- [ ] Create Razorpay webhook endpoint: `apps/web/app/api/webhooks/razorpay/route.ts`
-- [ ] Verify Razorpay webhook signature
-- [ ] Handle events: `subscription.activated`, `subscription.cancelled`, `payment.failed`
+- [ ] Create Razorpay account (manual — needs real account)
+- [ ] Create 2 plans in Razorpay dashboard: Pro (₹999/mo) and Team (₹2999/mo) (manual — needs real account; set the resulting plan IDs as `RAZORPAY_PLAN_ID_PRO`/`RAZORPAY_PLAN_ID_TEAM`)
+- [x] Install Razorpay SDK
+- [x] Create Razorpay webhook endpoint: `apps/web/app/api/webhooks/razorpay/route.ts`
+- [x] Verify Razorpay webhook signature
+- [x] Handle events: `subscription.activated`, `subscription.cancelled`, `payment.failed`
 
-**Test:** Razorpay webhook test ping → signature verified → event logged.
+**Test:** Razorpay webhook test ping → signature verified → event logged. (untested live — needs real Razorpay account + webhook secret)
 
 ---
 
 ### 11.2 — Billing Gates in tRPC
-- [ ] Create `checkBillingLimit` utility function:
-  - Takes: workspaceId, limitType (features/ai_credits/repos/members)
+- [x] Create `checkBillingLimit` utility function (`packages/db/src/billing-limits.ts`):
+  - Takes: workspaceId, limitType (features/prd_generations/ai_reviews/repos/members)
   - Queries workspace plan from DB
   - Returns: allowed (boolean) + current usage + limit
-- [ ] Add billing check to:
+- [x] Add billing check to:
   - `feature.create` → max 3 on free
-  - `prd.generate` → max 2 on free
-  - `review.trigger` → max 5 on free
-  - `github.connectRepo` → max 1 on free
+  - PRD generation workflow → max 2 on free
+  - AI review workflow → max 5 on free
+  - `github.connectRepository` → max 1 on free
   - `workspace.inviteMember` → max 1 on free
-- [ ] Return clear error: "You've reached your free plan limit. Upgrade to Pro."
+- [x] Return clear error: "You've reached your free plan limit. Upgrade to Pro."
 
-**Test:** Create 3 features on free plan → 4th attempt returns billing error. Upgrade to Pro → can create unlimited.
+**Test:** Create 3 features on free plan → 4th attempt returns billing error. Upgrade to Pro → can create unlimited. (logic in place — untested live, needs a real Razorpay upgrade flow)
 
 ---
 
 ### 11.3 — Billing Page (UI)
-- [ ] Create `/workspace/[id]/billing` page
-- [ ] Show current plan with usage meters:
+- [x] Create `/workspace/[id]/billing` page
+- [x] Show current plan with usage meters:
   - Features used: 3/3
-  - AI credits: 5/5
-  - Repos connected: 1/1
-  - Team members: 1/1
-- [ ] Pricing cards: Free / Pro / Team
-- [ ] "Upgrade" button → Razorpay checkout flow
-- [ ] Show current subscription status
-- [ ] Show billing history
+  - PRD generations, AI reviews, Repos connected, Team members
+- [x] Pricing cards: Free / Pro / Team
+- [x] "Upgrade" button → Razorpay checkout flow
+- [x] Show current subscription status
+- [ ] Show billing history (skipped — no invoice list endpoint built; would need Razorpay's invoices API)
 
-**Test:** Free tier shows correct limits. Click Upgrade → Razorpay modal opens → complete test payment → plan upgrades in DB → limits update.
+**Test:** Free tier shows correct limits. Click Upgrade → Razorpay modal opens → complete test payment → plan upgrades in DB → limits update. (untested live — needs real Razorpay plan IDs + a test payment)
 
 ---
 

@@ -9,6 +9,7 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   aiReviews,
+  checkBillingLimit,
   clarificationMessages,
   features,
   notifications,
@@ -36,6 +37,14 @@ export const featureRouter = createTRPCRouter({
   create: workspaceProcedure
     .input(createFeatureSchema)
     .mutation(async ({ ctx, input }) => {
+      const limit = await checkBillingLimit(ctx.workspaceId, "features");
+      if (!limit.allowed) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You've reached your free plan limit. Upgrade to Pro.",
+        });
+      }
+
       const [feature] = await ctx.db
         .insert(features)
         .values({
