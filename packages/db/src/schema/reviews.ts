@@ -2,6 +2,7 @@ import {
   bigint,
   boolean,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -25,6 +26,7 @@ export const pullRequests = pgTable("pull_requests", {
   headBranch: text("head_branch"),
   baseBranch: text("base_branch"),
   diffUrl: text("diff_url"),
+  diff: text("diff"),
   status: prStatusEnum("status").notNull().default("OPEN"),
   mergedAt: timestamp("merged_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -47,6 +49,10 @@ export const aiReviews = pgTable("ai_reviews", {
   githubCommentId: bigint("github_comment_id", { mode: "number" }),
   modelUsed: text("model_used"),
   tokensUsed: integer("tokens_used"),
+  isLargePR: boolean("is_large_pr").notNull().default(false),
+  isArchived: boolean("is_archived").notNull().default(false),
+  resolvedFromPrevious: jsonb("resolved_from_previous"),
+  criteriaCoverage: jsonb("criteria_coverage"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -64,5 +70,6 @@ export const reviewIssues = pgTable("review_issues", {
   suggestedFix: text("suggested_fix"),
   isResolved: boolean("is_resolved").notNull().default(false),
   resolvedAt: timestamp("resolved_at"),
+  carriedOverFromReviewNumber: integer("carried_over_from_review_number"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

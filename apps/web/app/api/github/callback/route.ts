@@ -2,11 +2,18 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 
 /**
- * GitHub redirects here after the App install/OAuth round-trip. The
- * onboarding form data lives in localStorage on the client (keyed by
- * `state`), so this route can't finish workspace creation itself — it just
- * forwards GitHub's params back to the onboarding page, which reads
- * localStorage and calls `github.completeWorkspaceOnboarding`.
+ * GitHub redirects here after the App install/OAuth round-trip. Onboarding's
+ * form data lives in localStorage on the client (keyed by `state`), so this
+ * route can't finish workspace creation itself — it just forwards GitHub's
+ * params back to the right client page, which reads localStorage and calls
+ * the relevant tRPC mutation.
+ *
+ * Two flows share this single callback. The flow is distinguished by a
+ * prefix baked directly into `state` (round-tripped verbatim by GitHub), so
+ * this route can branch without any server-side lookup:
+ *  - onboarding flow: bare `state` (a random UUID) → `/onboarding/workspace`
+ *  - "connect another repo" flow: `state` = `add-repo:{workspaceId}:{uuid}`
+ *    → `/workspace/{workspaceId}/github`
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -21,7 +28,12 @@ export async function GET(req: Request) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const target = new URL("/onboarding/workspace", req.url);
+  const addRepoMatch = state?.match(/^add-repo:([^:]+):/);
+
+  const target = addRepoMatch
+    ? new URL(`/workspace/${addRepoMatch[1]}/github`, req.url)
+    : new URL("/onboarding/workspace", req.url);
+
   if (installationId) target.searchParams.set("installation_id", installationId);
   if (setupAction) target.searchParams.set("setup_action", setupAction);
   if (state) target.searchParams.set("state", state);

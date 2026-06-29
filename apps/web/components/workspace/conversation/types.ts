@@ -3,4 +3,5 @@ export interface ConversationMessage {
   role: "alfred" | "user"
   content: string
   options?: string[] | null
+  createdAt?: Date | string
 }

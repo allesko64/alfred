@@ -42,6 +42,8 @@ export const repositories = pgTable(
     installationId: bigint("installation_id", { mode: "number" }).notNull(),
     isIndexed: boolean("is_indexed").notNull().default(false),
     indexedAt: timestamp("indexed_at"),
+    lastWebhookAt: timestamp("last_webhook_at"),
+    disconnectedAt: timestamp("disconnected_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => [

@@ -1,7 +1,22 @@
 import { serve } from "inngest/next";
-import { clarificationWorkflow, inngest, prdGenerationWorkflow } from "@alfred/inngest";
+import {
+  aiReviewWorkflow,
+  clarificationWorkflow,
+  inngest,
+  prdGenerationWorkflow,
+  prIngestionWorkflow,
+  reReviewWorkflow,
+  taskGenerationWorkflow,
+} from "@alfred/inngest";
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [clarificationWorkflow, prdGenerationWorkflow],
+  functions: [
+    clarificationWorkflow,
+    prdGenerationWorkflow,
+    taskGenerationWorkflow,
+    prIngestionWorkflow,
+    aiReviewWorkflow,
+    reReviewWorkflow,
+  ],
 });

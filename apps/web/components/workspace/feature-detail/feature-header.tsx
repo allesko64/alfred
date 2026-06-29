@@ -7,6 +7,7 @@ import { TopBar } from "@/components/workspace/topbar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatusBadge } from "@/components/workspace/dashboard/status-dot"
 import { Timestamp } from "@/components/workspace/timestamp"
+import { useFeatureHeaderAction } from "./feature-header-actions"
 
 export function FeatureHeader({
   workspaceId,
@@ -19,6 +20,7 @@ export function FeatureHeader({
   const { data: feature, isLoading } = useQuery(
     trpc.feature.getById.queryOptions({ workspaceId, featureId }),
   )
+  const headerAction = useFeatureHeaderAction()
 
   return (
     <div className="flex flex-col">
@@ -29,9 +31,12 @@ export function FeatureHeader({
           <Skeleton className="h-12 w-full max-w-md" />
         ) : (
           <>
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-semibold text-foreground">{feature.title}</h1>
-              <StatusBadge status={feature.status} />
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-semibold text-foreground">{feature.title}</h1>
+                <StatusBadge status={feature.status} />
+              </div>
+              {headerAction}
             </div>
             <span className="text-xs text-muted-foreground">
               Created by {feature.createdByName ?? feature.createdByEmail} ·{" "}

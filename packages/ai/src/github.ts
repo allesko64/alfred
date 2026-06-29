@@ -67,6 +67,86 @@ export async function getInstallationUrl(state: string): Promise<string> {
   return getGithubApp().getInstallationUrl({ state });
 }
 
+export interface GithubPullRequestDetails {
+  githubPrId: number;
+  number: number;
+  title: string;
+  body: string | null;
+  author: string | null;
+  headBranch: string;
+  baseBranch: string;
+  htmlUrl: string;
+  isMerged: boolean;
+  isOpen: boolean;
+  diff: string;
+}
+
+/** Fetches full PR details and the raw unified diff for a single pull request. */
+export async function getPullRequestWithDiff(
+  installationId: number,
+  owner: string,
+  repo: string,
+  pullNumber: number,
+): Promise<GithubPullRequestDetails> {
+  const octokit = await getInstallationOctokit(installationId);
+
+  const { data: pr } = await octokit.pulls.get({ owner, repo, pull_number: pullNumber });
+  const { data: diff } = await octokit.pulls.get({
+    owner,
+    repo,
+    pull_number: pullNumber,
+    mediaType: { format: "diff" },
+  });
+
+  return {
+    githubPrId: pr.id,
+    number: pr.number,
+    title: pr.title,
+    body: pr.body,
+    author: pr.user?.login ?? null,
+    headBranch: pr.head.ref,
+    baseBranch: pr.base.ref,
+    htmlUrl: pr.html_url,
+    isMerged: pr.merged === true,
+    isOpen: pr.state === "open",
+    diff: diff as unknown as string,
+  };
+}
+
+/**
+ * Creates a new PR comment, or edits an existing one if `existingCommentId`
+ * is given. PR comments are posted through the issues API — GitHub treats a
+ * PR's conversation thread as an issue thread.
+ */
+export async function upsertPullRequestComment(
+  installationId: number,
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  body: string,
+  existingCommentId?: number | null,
+): Promise<number> {
+  const octokit = await getInstallationOctokit(installationId);
+
+  if (existingCommentId) {
+    const { data } = await octokit.issues.updateComment({
+      owner,
+      repo,
+      comment_id: existingCommentId,
+      body,
+    });
+    return data.id;
+  }
+
+  const { data } = await octokit.issues.createComment({
+    owner,
+    repo,
+    issue_number: pullNumber,
+    body,
+  });
+  return data.id;
+}
+
 export interface GithubUserProfile {
   username: string;
   name: string | null;

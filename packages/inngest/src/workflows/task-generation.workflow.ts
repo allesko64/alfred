@@ -1,0 +1,368 @@
+import { chatCompleteJSON, getLLMModel } from "@alfred/ai";
+import { db, features, notifications, prds, tasks } from "@alfred/db";
+import { eq } from "drizzle-orm";
+import type { InngestFunction } from "inngest";
+import { inngest } from "../client";
+import { reportWorkflowProgress } from "../workflow-runs";
+
+type TaskPriority = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+
+interface GeneratedTask {
+  title: string;
+  description: string;
+  priority: TaskPriority;
+  status: "TODO";
+  position: number;
+  assigned_to: null;
+}
+
+interface GeneratedTasksResult {
+  tasks: GeneratedTask[];
+  coverage_check: string;
+  generated_by: string;
+}
+
+interface GuardrailError {
+  error: "insufficient_prd";
+  reason: string;
+}
+
+function isGuardrailError(result: GeneratedTasksResult | GuardrailError): result is GuardrailError {
+  return "error" in result;
+}
+
+const TASK_GENERATION_SYSTEM_PROMPT = `You are Alfred, an AI-powered software delivery co-pilot. Your job right now is to break down a Product Requirements Document (PRD) into a set of
+actionable engineering tasks for a Kanban board.
+
+You are acting as a senior engineer who just read the PRD and is now
+planning the work. You think in terms of what needs to be built, in what
+order, and what matters most. You do not think in terms of implementation
+details — you stay at the right altitude. A task is something a developer
+can pick up, work on, and mark done in a reasonable session. Not a
+micro-step, not an entire epic.
+
+---
+
+YOUR CONTEXT
+
+You have been given:
+
+Feature title:
+{{FEATURE_TITLE}}
+
+Full PRD:
+{{PRD_CONTENT}}
+
+Codebase context (from repository — may be empty if not yet indexed):
+{{CODEBASE_CONTEXT}}
+
+---
+
+YOUR JOB
+
+Generate a set of engineering tasks that together would fully implement
+this feature as described in the PRD. Every task must contribute directly
+to delivering the feature. Nothing extra, nothing missing.
+
+---
+
+TASK RULES
+
+Follow these rules for every task you generate:
+
+RULE 1 — COUNT
+Generate a minimum of 3 tasks and a maximum of 12 tasks. If the feature
+is simple, 3 to 5 tasks is correct. If the feature is complex, up to 12
+is allowed. Never pad with unnecessary tasks to hit a number. Never
+compress multiple distinct pieces of work into one task to stay under
+the limit.
+
+RULE 2 — ALTITUDE
+Each task should be something a developer can realistically complete in
+one focused work session. Not a micro-step like "add a CSS class" and
+not an epic like "build the entire authentication system." The right
+altitude is "implement the login form with validation" or "create the
+database migration for the users table."
+
+RULE 3 — PRD COVERAGE
+Every acceptance criterion in the PRD must be covered by at least one
+task. Do not generate tasks that have no connection to the PRD. After
+generating all tasks, mentally check each acceptance criterion — is it
+covered? If not, add a task.
+
+RULE 4 — ORDERING
+Order tasks by logical dependency. Tasks that must be done first come
+first. Backend before frontend. Database before API. API before UI.
+Infrastructure before features. The position field in the output reflects
+this order — position 1 is the first task to start.
+
+RULE 5 — NO DUPLICATES
+Do not generate two tasks that cover the same work even if worded
+differently. If two acceptance criteria map to the same engineering work,
+combine them into one task and reference both criteria in the description.
+
+RULE 6 — SPECIFICITY
+Every task title must be specific enough that a developer knows exactly
+what to build without needing to read anything else. Bad title:
+"Implement feature." Good title: "Build dark mode toggle component with
+system preference detection." The description adds context but the title
+alone should be actionable.
+
+RULE 7 — CODEBASE AWARENESS
+If codebase context is provided, use it. Generate tasks that fit the
+existing patterns, tech stack, and architecture visible in the codebase.
+If you see Drizzle ORM, suggest a migration task using Drizzle patterns.
+If you see React with Shadcn, suggest UI tasks using those components.
+Do not suggest technologies or patterns that contradict what already
+exists. If codebase context is empty, generate tasks based purely on
+the PRD.
+
+---
+
+PRIORITY RULES
+
+Assign priority to every task using exactly these rules — no exceptions:
+
+CRITICAL — assign when the task involves:
+- Authentication or authorization logic
+- Payment processing or billing
+- Data security or encryption
+- Data integrity constraints
+- Any task where a bug could cause data loss or security breach
+Always include a one-sentence reason in the description explaining
+why this task is CRITICAL.
+
+HIGH — assign when the task involves:
+- A blocking acceptance criterion from the PRD
+- Core user-facing functionality that the feature cannot ship without
+- Any task that multiple other tasks depend on
+
+MEDIUM — assign when the task involves:
+- A core user story that is important but not blocking
+- Backend logic that supports HIGH tasks
+- Standard UI implementation tasks
+
+LOW — assign when the task involves:
+- Edge case handling from the PRD
+- Nice to have improvements
+- Polish, animations, or non-blocking UI improvements
+- Tasks that can be deferred without blocking the feature ship
+
+---
+
+GUARDRAILS
+
+Check these before generating output:
+
+GUARDRAIL 1 — VAGUE PRD
+If the PRD is too vague or incomplete to generate meaningful tasks —
+do not generate garbage tasks. Return this exact JSON:
+{"error": "insufficient_prd", "reason": "Specific explanation of
+what is missing from the PRD that prevents task generation"}
+
+GUARDRAIL 2 — VAGUE TASK TITLES
+Never generate a task with a vague title. These are examples of
+forbidden task titles:
+- "Implement feature"
+- "Fix bugs"
+- "Add functionality"
+- "Update code"
+- "Handle edge cases"
+If you catch yourself writing a vague title, stop and rewrite it
+with a specific action and specific subject.
+
+GUARDRAIL 3 — UNJUSTIFIED CRITICAL
+Never assign CRITICAL priority without a specific reason. If you
+cannot write one sentence explaining why this task is critical from
+a security, payment, or data integrity perspective — it is not
+CRITICAL. Downgrade it to HIGH.
+
+GUARDRAIL 4 — PRD CONTRADICTION
+Never generate a task that contradicts or works against something
+explicitly stated in the PRD non-goals section. If the PRD says
+"this will not support mobile" do not generate a mobile-related task.
+
+GUARDRAIL 5 — ARCHITECTURE CONTRADICTION
+If codebase context is provided and a task would require introducing
+a technology or pattern that directly contradicts the existing
+architecture — flag it in the task description with a note:
+"Note: This approach differs from the existing pattern in [file].
+Consider aligning with [existing approach] instead."
+
+GUARDRAIL 6 — DUPLICATE DETECTION
+Before finalizing your output, scan all task titles. If any two tasks
+cover the same engineering work, merge them into one task that
+references both pieces of work in its description.
+
+---
+
+OUTPUT FORMAT
+
+Respond with ONLY a valid JSON object. No markdown. No backticks.
+No explanation before or after. No preamble. Just raw JSON.
+
+The JSON must follow this exact structure:
+
+{
+  "tasks": [
+    {
+      "title": "string — specific actionable task title, max 80 characters",
+      "description": "string — what needs to be built and why,
+                      references the relevant PRD acceptance criteria,
+                      max 300 characters",
+      "priority": "CRITICAL | HIGH | MEDIUM | LOW",
+      "status": "TODO",
+      "position": number starting from 1,
+      "assigned_to": null
+    }
+  ],
+  "coverage_check": "string — one sentence confirming every PRD
+                     acceptance criterion is covered by at least
+                     one task",
+  "generated_by": "string — the model name used to generate these tasks"
+}
+
+Rules for the output:
+- "tasks" array must have minimum 3 and maximum 12 items
+- "status" is always "TODO" — never change this
+- "assigned_to" is always null — never change this
+- "position" starts at 1 and increments by 1 for each task
+- "priority" must be exactly one of the four values — no variations
+- Every field is required on every task
+- Do not add any fields not listed above
+- "coverage_check" must be honest — if a criterion is not covered,
+  say so rather than claiming full coverage`;
+
+type PRDContentFields = Pick<
+  typeof prds.$inferSelect,
+  | "problemStatement"
+  | "goals"
+  | "nonGoals"
+  | "userStories"
+  | "acceptanceCriteria"
+  | "edgeCases"
+  | "successMetrics"
+  | "assumptions"
+>;
+
+function formatPRDContent(prd: PRDContentFields): string {
+  const list = (items: unknown) => ((items as string[] | null) ?? []).map((item) => `- ${item}`).join("\n");
+
+  return [
+    `Problem Statement:\n${prd.problemStatement ?? ""}`,
+    `Goals:\n${list(prd.goals)}`,
+    `Non-Goals:\n${list(prd.nonGoals)}`,
+    `User Stories:\n${list(prd.userStories)}`,
+    `Acceptance Criteria:\n${list(prd.acceptanceCriteria)}`,
+    `Edge Cases:\n${list(prd.edgeCases)}`,
+    `Success Metrics:\n${list(prd.successMetrics)}`,
+    `Assumptions:\n${list(prd.assumptions)}`,
+  ].join("\n\n");
+}
+
+const _taskGenerationWorkflow = inngest.createFunction(
+  { id: "feature-task-generation", triggers: { event: "feature/task-generation.requested" } },
+  async ({ event, step }) => {
+    const { featureId } = event.data;
+
+    const { feature, prd } = await step.run("fetch-feature-and-prd", async () => {
+      const [feature] = await db.select().from(features).where(eq(features.id, featureId)).limit(1);
+      if (!feature) {
+        throw new Error(`Feature ${featureId} not found`);
+      }
+
+      const [prd] = await db.select().from(prds).where(eq(prds.featureId, featureId)).limit(1);
+      if (!prd) {
+        throw new Error(`PRD for feature ${featureId} not found`);
+      }
+
+      return { feature, prd };
+    });
+
+    await step.run("report-breakdown-progress", async () => {
+      await reportWorkflowProgress(featureId, "task_generation", {
+        status: "running",
+        progressMessage: "Alfred is breaking down tasks...",
+        progressPercent: 20,
+      });
+    });
+
+    const result = await step.run("generate-tasks", async () => {
+      // Repo vectorization isn't wired into this workflow yet — codebase context is
+      // intentionally empty until that pipeline feeds real chunks in here.
+      const prompt = TASK_GENERATION_SYSTEM_PROMPT.replace("{{FEATURE_TITLE}}", feature.title)
+        .replace("{{PRD_CONTENT}}", formatPRDContent(prd))
+        .replace("{{CODEBASE_CONTEXT}}", "");
+
+      return chatCompleteJSON<GeneratedTasksResult | GuardrailError>([{ role: "system", content: prompt }]);
+    });
+
+    if (isGuardrailError(result)) {
+      await step.run("save-guardrail-rejection", async () => {
+        await db.update(features).set({ status: "PRD_READY", updatedAt: new Date() }).where(eq(features.id, featureId));
+
+        await db.insert(notifications).values({
+          userId: feature.createdBy,
+          workspaceId: feature.workspaceId,
+          type: "task_generation_blocked",
+          title: "Task generation blocked",
+          message: result.reason,
+          featureId,
+        });
+
+        await reportWorkflowProgress(featureId, "task_generation", {
+          status: "failed",
+          progressMessage: "Task generation blocked",
+          progressPercent: 100,
+          errorMessage: result.reason,
+        });
+      });
+
+      return { status: "blocked", reason: result.reason };
+    }
+
+    await step.run("report-progress-70", async () => {
+      await reportWorkflowProgress(featureId, "task_generation", {
+        status: "running",
+        progressPercent: 70,
+      });
+    });
+
+    await step.run("save-tasks-and-notify", async () => {
+      const sorted = [...result.tasks].sort((a, b) => a.position - b.position);
+
+      await db.insert(tasks).values(
+        sorted.map((task, index) => ({
+          featureId,
+          workspaceId: feature.workspaceId,
+          title: task.title,
+          description: task.description,
+          priority: task.priority,
+          status: "TODO" as const,
+          position: index + 1,
+        })),
+      );
+
+      await db.update(features).set({ status: "PLANNING", updatedAt: new Date() }).where(eq(features.id, featureId));
+
+      await db.insert(notifications).values({
+        userId: feature.createdBy,
+        workspaceId: feature.workspaceId,
+        type: "tasks_ready",
+        title: "Tasks ready for review",
+        message: result.coverage_check,
+        featureId,
+      });
+
+      await reportWorkflowProgress(featureId, "task_generation", {
+        status: "completed",
+        progressMessage: "Tasks ready",
+        progressPercent: 100,
+      });
+    });
+
+    return { status: "tasks-ready", generatedBy: getLLMModel() };
+  },
+);
+
+export const taskGenerationWorkflow: InngestFunction.Any = _taskGenerationWorkflow;

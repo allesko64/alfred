@@ -30,3 +30,29 @@ export interface FeatureTaskGenerationRequested {
     featureId: string;
   };
 }
+
+export interface GithubPRIngestionRequested {
+  name: "github/pr-ingestion.requested";
+  data: {
+    githubRepoId: number;
+    githubPrNumber: number;
+    action: "opened" | "synchronize" | "closed";
+  };
+}
+
+export interface FeatureAIReviewRequested {
+  name: "feature/ai-review.requested";
+  data: {
+    featureId: string;
+    pullRequestId: string;
+  };
+}
+
+/** Fired on a `synchronize` webhook for an already-linked PR. Debounced 5m per featureId. */
+export interface FeaturePRResyncRequested {
+  name: "feature/pr-resync.requested";
+  data: {
+    featureId: string;
+    pullRequestId: string;
+  };
+}

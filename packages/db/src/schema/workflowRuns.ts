@@ -13,6 +13,7 @@ export const workflowRuns = pgTable("workflow_runs", {
   progressMessage: text("progress_message"),
   progressPercent: integer("progress_percent").notNull().default(0),
   errorMessage: text("error_message"),
+  scheduledAt: timestamp("scheduled_at"),
   startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

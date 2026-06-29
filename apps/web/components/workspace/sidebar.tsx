@@ -6,14 +6,11 @@ import { useQuery } from "@tanstack/react-query"
 import { motion } from "motion/react"
 import {
   CaretDownIcon,
-  CheckSquareIcon,
   CreditCardIcon,
-  FolderIcon,
   GearIcon,
   GithubLogoIcon,
   HouseIcon,
   PlusIcon,
-  ShieldCheckIcon,
   SignOutIcon,
   SparkleIcon,
   UserCircleIcon,
@@ -23,7 +20,6 @@ import { cn } from "@/lib/utils"
 import { PHASE_COLORS } from "@/lib/phase-colors"
 import { useSession, signOut } from "@/lib/auth-client"
 import { useTRPC } from "@/lib/trpc/client"
-import { AlfredLogo } from "@/components/icons/alfred-logo"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -38,9 +34,6 @@ import {
 const NAV_ITEMS = [
   { label: "Dashboard", icon: HouseIcon, segment: "dashboard" },
   { label: "Features", icon: SparkleIcon, segment: "features", color: PHASE_COLORS.amber },
-  { label: "Projects", icon: FolderIcon, segment: "projects", color: PHASE_COLORS.sky },
-  { label: "Tasks", icon: CheckSquareIcon, segment: "tasks", color: PHASE_COLORS.violet },
-  { label: "Reviews", icon: ShieldCheckIcon, segment: "reviews", color: PHASE_COLORS.orange },
   { label: "GitHub", icon: GithubLogoIcon, segment: "github" },
 ] as const
 
@@ -67,7 +60,7 @@ function NavLink({
       href={href}
       style={color ? ({ "--nav-color": color } as React.CSSProperties) : undefined}
       className={cn(
-        "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs transition-colors",
+        "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
         isActive
           ? color
             ? "font-medium text-[var(--nav-color)]"
@@ -111,10 +104,9 @@ export function Sidebar({ workspaceId }: { workspaceId: string }) {
     <aside className="fixed inset-y-0 left-0 flex w-60 flex-col border-r border-border bg-card">
       <Link
         href={`/workspace/${workspaceId}/dashboard`}
-        className="flex items-center gap-2.5 px-4 py-5 text-foreground"
+        className="flex items-center px-4 py-5 text-foreground"
       >
-        <AlfredLogo className="size-8" />
-        <span className="text-lg font-semibold">Alfred</span>
+        <span className="font-mono text-lg font-semibold">A.L.F.R.E.D</span>
       </Link>
 
       <DropdownMenu>

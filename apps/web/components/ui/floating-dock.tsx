@@ -24,7 +24,7 @@ export const FloatingDock = ({
   desktopClassName,
   mobileClassName,
 }: {
-  items: { title: string; icon: React.ReactNode; href: string }[];
+  items: { title: string; icon: React.ReactNode; href: string; isActive?: boolean }[];
   desktopClassName?: string;
   mobileClassName?: string;
 }) => {
@@ -40,7 +40,7 @@ const FloatingDockMobile = ({
   items,
   className,
 }: {
-  items: { title: string; icon: React.ReactNode; href: string }[];
+  items: { title: string; icon: React.ReactNode; href: string; isActive?: boolean }[];
   className?: string;
 }) => {
   const [open, setOpen] = useState(false);
@@ -72,7 +72,10 @@ const FloatingDockMobile = ({
                 <Link
                   href={item.href}
                   key={item.title}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-50 dark:bg-neutral-900"
+                  className={cn(
+                    "flex h-10 w-10 items-center justify-center rounded-full bg-gray-50 dark:bg-neutral-900",
+                    item.isActive && "bg-primary/15 ring-1 ring-primary/40 dark:bg-primary/20",
+                  )}
                 >
                   <div className="h-4 w-4">{item.icon}</div>
                 </Link>
@@ -95,7 +98,7 @@ const FloatingDockDesktop = ({
   items,
   className,
 }: {
-  items: { title: string; icon: React.ReactNode; href: string }[];
+  items: { title: string; icon: React.ReactNode; href: string; isActive?: boolean }[];
   className?: string;
 }) => {
   let mouseX = useMotionValue(Infinity);
@@ -104,7 +107,7 @@ const FloatingDockDesktop = ({
       onMouseMove={(e) => mouseX.set(e.pageX)}
       onMouseLeave={() => mouseX.set(Infinity)}
       className={cn(
-        "mx-auto hidden h-16 items-end gap-4 rounded-2xl bg-gray-50 px-4 pb-3 md:flex dark:bg-neutral-900",
+        "mx-auto hidden h-16 items-end gap-6 rounded-2xl bg-gray-50/80 px-6 pb-3 backdrop-blur-md ring-1 ring-black/5 md:flex dark:bg-neutral-900/70 dark:ring-white/10",
         className,
       )}
     >
@@ -120,11 +123,13 @@ function IconContainer({
   title,
   icon,
   href,
+  isActive,
 }: {
   mouseX: MotionValue;
   title: string;
   icon: React.ReactNode;
   href: string;
+  isActive?: boolean;
 }) {
   let ref = useRef<HTMLDivElement>(null);
 
@@ -175,7 +180,10 @@ function IconContainer({
         style={{ width, height }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        className="relative flex aspect-square items-center justify-center rounded-full bg-gray-200 dark:bg-neutral-800"
+        className={cn(
+          "relative flex aspect-square items-center justify-center rounded-full bg-gray-200 dark:bg-neutral-800",
+          isActive && "bg-primary/15 ring-1 ring-primary/40 dark:bg-primary/20",
+        )}
       >
         <AnimatePresence>
           {hovered && (

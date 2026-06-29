@@ -7,8 +7,8 @@ import { AnimatePresence, motion } from "framer-motion"
 import { ArrowLeftIcon } from "@phosphor-icons/react"
 
 import { useTRPC } from "@/lib/trpc/client"
+import { formatRelativeTime } from "@/lib/utils"
 import { PlaceholdersAndVanishInput } from "@/components/ui/placeholders-and-vanish-input"
-import { AlfredLogo } from "@/components/icons/alfred-logo"
 import { MessageBubble, ThinkingBubble } from "@/components/workspace/conversation"
 import type { ConversationMessage } from "@/components/workspace/conversation"
 
@@ -34,6 +34,10 @@ export function NewFeatureChatClient() {
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [input, setInput] = useState("")
   const scrollAnchorRef = useRef<HTMLDivElement>(null)
+  // Snapshot of how many messages existed when we started waiting, so we only
+  // clear "thinking" once a genuinely new alfred message arrives — not the
+  // stale one already sitting at the end of dbMessages from the prior round.
+  const thinkingBaselineRef = useRef(0)
 
   const shouldPoll = isThinking && !!featureId
 
@@ -64,10 +68,11 @@ export function NewFeatureChatClient() {
     }
   }, [dbMessages, optimisticContent])
 
-  // Alfred's reply landed — stop "thinking".
+  // Alfred's reply landed — stop "thinking". Only counts once a new message
+  // (beyond the baseline captured at submit time) has actually arrived.
   useEffect(() => {
     const last = dbMessages[dbMessages.length - 1]
-    if (isThinking && last?.role === "alfred") {
+    if (isThinking && dbMessages.length > thinkingBaselineRef.current && last?.role === "alfred") {
       setIsThinking(false)
     }
   }, [dbMessages, isThinking])
@@ -82,7 +87,7 @@ export function NewFeatureChatClient() {
     setIsThinking(false)
     setIsTransitioning(true)
     const timeout = setTimeout(() => {
-      router.push(`/workspace/${workspaceId}/features/${featureId}`)
+      router.push(`/workspace/${workspaceId}/features/${featureId}/prd`)
     }, 1600)
     return () => clearTimeout(timeout)
   }, [featureQuery.data?.status, featureId, isTransitioning, router, workspaceId])
@@ -90,7 +95,13 @@ export function NewFeatureChatClient() {
   const messages: ConversationMessage[] = useMemo(() => {
     const list: ConversationMessage[] = [{ id: "welcome", role: "alfred", content: WELCOME_MESSAGE }]
     for (const m of dbMessages) {
-      list.push({ id: m.id, role: m.role, content: m.content, options: (m.options as string[] | null) ?? undefined })
+      list.push({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        options: (m.options as string[] | null) ?? undefined,
+        createdAt: m.createdAt,
+      })
     }
     if (optimisticContent) {
       list.push({ id: "optimistic", role: "user", content: optimisticContent })
@@ -109,6 +120,7 @@ export function NewFeatureChatClient() {
     if (!content || isThinking || isTransitioning) return
 
     setOptimisticContent(content)
+    thinkingBaselineRef.current = dbMessages.length
     setIsThinking(true)
     setInput("")
 
@@ -144,22 +156,37 @@ export function NewFeatureChatClient() {
         >
           <ArrowLeftIcon className="size-4" />
         </button>
-        <AlfredLogo className="size-6 text-foreground" />
-        <span className="text-xs text-muted-foreground">New Feature</span>
+        <span className="text-base font-medium text-muted-foreground">New Feature</span>
       </div>
 
-      <div className="flex flex-1 flex-col items-center overflow-y-auto px-6 py-10">
-        <div className="flex w-full max-w-[700px] flex-1 flex-col justify-center gap-6">
+      <div className="flex flex-1 flex-col items-center overflow-y-auto px-6">
+        {/* pt-[33vh] anchors Alfred's opening message roughly a third of the way down
+            on first load; it stays fixed as more messages stack below and the
+            container starts scrolling once content overflows. */}
+        <div className="flex w-full max-w-[700px] flex-col gap-2 pt-[33vh] pb-10">
           <AnimatePresence initial={false}>
-            {messages.map((message) => (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                interactive
-                showOptions={message.id === lastMessageId && !isBusy}
-                onOptionClick={submitMessage}
-              />
-            ))}
+            {messages.map((message, index) => {
+              const previous = messages[index - 1]
+              // Tight spacing within a question/answer pair, more room before the
+              // next one starts — like paragraph breaks between exchanges.
+              const isNewExchange = index > 0 && message.role === "alfred" && previous?.role === "user"
+
+              return (
+                <div key={message.id} className={isNewExchange ? "pt-6" : undefined}>
+                  {isNewExchange && (
+                    <div className="pb-2 text-center text-[11px] text-muted-foreground/60">
+                      {message.createdAt ? formatRelativeTime(message.createdAt) : "Just now"}
+                    </div>
+                  )}
+                  <MessageBubble
+                    message={message}
+                    interactive
+                    showOptions={message.id === lastMessageId && !isBusy}
+                    onOptionClick={submitMessage}
+                  />
+                </div>
+              )
+            })}
           </AnimatePresence>
           {isThinking && !isTransitioning && <ThinkingBubble />}
           <div ref={scrollAnchorRef} />
@@ -172,6 +199,7 @@ export function NewFeatureChatClient() {
             <PlaceholdersAndVanishInput
               placeholders={INPUT_PLACEHOLDERS}
               disabled={isBusy}
+              isThinking={isThinking}
               onChange={(e) => setInput(e.target.value)}
               onSubmit={handleSubmit}
             />

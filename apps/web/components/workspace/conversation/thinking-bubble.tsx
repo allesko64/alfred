@@ -5,10 +5,7 @@ import { motion } from "framer-motion"
 
 import { AlfredAvatar } from "./alfred-avatar"
 
-const THINKING_STAGES = [
-  "Reading your answer...",
-  "Thinking through the next question...",
-]
+const THINKING_STAGES = ["Reading...", "Thinking...", "Considering...", "Drafting..."]
 
 export function ThinkingBubble() {
   const [stage, setStage] = useState(0)

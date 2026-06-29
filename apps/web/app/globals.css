@@ -279,6 +279,7 @@
   background: var(--surface);
   border: 0.5px solid var(--border-default);
   border-radius: var(--radius-card);
+  overflow: hidden;
 }
 
 .surface-card-raised {

@@ -1,5 +1,11 @@
 import { TRPCError } from "@trpc/server";
-import { createTaskSchema, updateTaskStatusSchema } from "@alfred/validators";
+import {
+  approveTaskPlanSchema,
+  createTaskSchema,
+  moveTaskSchema,
+  updateTaskSchema,
+  updateTaskStatusSchema,
+} from "@alfred/validators";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { features, tasks } from "@alfred/db";
@@ -57,5 +63,57 @@ export const taskRouter = createTRPCRouter({
       }
 
       return task;
+    }),
+
+  // Used by the Kanban board's drag-and-drop: updates both the column (status)
+  // and the position within that column in one call.
+  move: workspaceProcedure
+    .input(moveTaskSchema.extend({ workspaceId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [task] = await ctx.db
+        .update(tasks)
+        .set({ status: input.status, position: input.position, updatedAt: new Date() })
+        .where(and(eq(tasks.id, input.taskId), eq(tasks.workspaceId, ctx.workspaceId)))
+        .returning();
+
+      if (!task) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      return task;
+    }),
+
+  update: workspaceProcedure
+    .input(updateTaskSchema.extend({ workspaceId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const { taskId, workspaceId, ...patch } = input;
+
+      const [task] = await ctx.db
+        .update(tasks)
+        .set({ ...patch, updatedAt: new Date() })
+        .where(and(eq(tasks.id, taskId), eq(tasks.workspaceId, ctx.workspaceId)))
+        .returning();
+
+      if (!task) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      return task;
+    }),
+
+  approvePlan: workspaceProcedure
+    .input(approveTaskPlanSchema.extend({ workspaceId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [feature] = await ctx.db
+        .update(features)
+        .set({ status: "IN_DEVELOPMENT", updatedAt: new Date() })
+        .where(and(eq(features.id, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
+        .returning();
+
+      if (!feature) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      return feature;
     }),
 });

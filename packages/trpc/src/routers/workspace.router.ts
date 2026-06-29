@@ -6,7 +6,7 @@ import {
   inviteMemberSchema,
 } from "@alfred/validators";
 import { and, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
-import { features, workspaceInvites, workspaceMemberships, workspaces } from "@alfred/db";
+import { features, users, workspaceInvites, workspaceMemberships, workspaces } from "@alfred/db";
 import {
   createTRPCRouter,
   protectedProcedure,
@@ -93,6 +93,14 @@ export const workspaceRouter = createTRPCRouter({
       .from(workspaceMemberships)
       .innerJoin(workspaces, eq(workspaces.id, workspaceMemberships.workspaceId))
       .where(eq(workspaceMemberships.userId, ctx.user.id));
+  }),
+
+  listMembers: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
+    return ctx.db
+      .select({ id: users.id, name: users.name, email: users.email, avatarUrl: users.avatarUrl })
+      .from(workspaceMemberships)
+      .innerJoin(users, eq(users.id, workspaceMemberships.userId))
+      .where(eq(workspaceMemberships.workspaceId, ctx.workspaceId));
   }),
 
   getDashboardStats: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {

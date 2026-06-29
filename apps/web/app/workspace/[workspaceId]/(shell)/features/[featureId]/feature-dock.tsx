@@ -10,6 +10,15 @@ const PULSE_SEGMENT_BY_STATUS: Record<string, string> = {
   TASK_GENERATION: "tasks",
 }
 
+const PRE_DEVELOPMENT_STATUSES = new Set([
+  "DRAFT",
+  "CLARIFYING",
+  "PRD_GENERATION",
+  "PRD_READY",
+  "TASK_GENERATION",
+  "PLANNING",
+])
+
 export function FeatureDock({
   workspaceId,
   featureId,
@@ -25,6 +34,7 @@ export function FeatureDock({
       workspaceId={workspaceId}
       featureId={featureId}
       pulseSegment={feature ? PULSE_SEGMENT_BY_STATUS[feature.status] : undefined}
+      mutedSegment={feature && PRE_DEVELOPMENT_STATUSES.has(feature.status) ? "review" : undefined}
     />
   )
 }

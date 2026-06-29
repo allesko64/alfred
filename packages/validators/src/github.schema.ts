@@ -38,8 +38,44 @@ export const lookupGithubUserSchema = z.object({
 export type LookupGithubUserInput = z.infer<typeof lookupGithubUserSchema>;
 
 export const linkPullRequestSchema = z.object({
+  workspaceId: z.string().uuid(),
   featureId: z.string().uuid(),
   pullRequestId: z.string().uuid(),
 });
 
 export type LinkPullRequestInput = z.infer<typeof linkPullRequestSchema>;
+
+export const unlinkPullRequestSchema = z.object({
+  workspaceId: z.string().uuid(),
+  pullRequestId: z.string().uuid(),
+});
+
+export type UnlinkPullRequestInput = z.infer<typeof unlinkPullRequestSchema>;
+
+export const connectRepositorySchema = z.object({
+  workspaceId: z.string().uuid(),
+  installationId: z.number().int().positive(),
+  githubRepoId: z.number().int().positive(),
+});
+
+export type ConnectRepositoryInput = z.infer<typeof connectRepositorySchema>;
+
+export const repositoryActionSchema = z.object({
+  workspaceId: z.string().uuid(),
+  repositoryId: z.string().uuid(),
+});
+
+export type RepositoryActionInput = z.infer<typeof repositoryActionSchema>;
+
+export const listUnlinkedPullRequestsSchema = z.object({
+  workspaceId: z.string().uuid(),
+});
+
+export type ListUnlinkedPullRequestsInput = z.infer<typeof listUnlinkedPullRequestsSchema>;
+
+export const requestReviewNowSchema = z.object({
+  workspaceId: z.string().uuid(),
+  featureId: z.string().uuid(),
+});
+
+export type RequestReviewNowInput = z.infer<typeof requestReviewNowSchema>;

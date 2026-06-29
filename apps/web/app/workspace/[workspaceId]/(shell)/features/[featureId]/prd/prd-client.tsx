@@ -1,40 +1,50 @@
 "use client"
 
+import { useMemo } from "react"
 import { useParams } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { motion } from "framer-motion"
-import { SpinnerIcon, WarningCircleIcon } from "@phosphor-icons/react"
+import { WarningCircleIcon } from "@phosphor-icons/react"
 
 import { useTRPC } from "@/lib/trpc/client"
-import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-import { Separator } from "@/components/ui/separator"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlfredLogo } from "@/components/icons/alfred-logo"
+import { LoaderFive } from "@/components/ui/loader"
+import { Button as StatefulButton } from "@/components/ui/stateful-button"
+import { NextStepLink } from "@/components/workspace/feature-detail/next-step-link"
+import { useSetFeatureHeaderAction } from "@/components/workspace/feature-detail/feature-header-actions"
 
-const SECTION_VARIANTS = {
+const CARD_VARIANTS = {
   hidden: { opacity: 0, y: 8 },
   show: { opacity: 1, y: 0 },
 }
 
-function Section({
+function PRDCard({
   title,
   index,
+  className,
   children,
 }: {
   title: string
   index: number
+  className?: string
   children: React.ReactNode
 }) {
   return (
     <motion.div
       initial="hidden"
       animate="show"
-      variants={SECTION_VARIANTS}
+      variants={CARD_VARIANTS}
       transition={{ duration: 0.3, delay: index * 0.1 }}
-      className="flex flex-col gap-2"
+      className={className}
     >
-      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-      {children}
+      <Card className="h-full">
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+        </CardHeader>
+        <CardContent>{children}</CardContent>
+      </Card>
     </motion.div>
   )
 }
@@ -97,7 +107,32 @@ export function PRDClient() {
 
   const prd = prdQuery.data
   const isApproved = !!feature?.approvedAt
-  const isApproving = approvePRD.isPending || isApproved
+  const showApprovalAction = !!prd && feature?.status !== "REJECTED"
+
+  useSetFeatureHeaderAction(
+    useMemo(() => {
+      if (!showApprovalAction) return null
+
+      if (isApproved) {
+        return (
+          <NextStepLink
+            href={`/workspace/${workspaceId}/features/${featureId}/tasks`}
+            label="View engineering tasks"
+          />
+        )
+      }
+
+      return (
+        <div className="flex flex-col items-end gap-1">
+          <StatefulButton onClick={() => approvePRD.mutateAsync({ workspaceId, featureId })}>
+            Approve PRD
+          </StatefulButton>
+          <span className="text-xs text-muted-foreground">Generates engineering tasks</span>
+        </div>
+      )
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showApprovalAction, isApproved, workspaceId, featureId]),
+  )
 
   if (feature?.status === "REJECTED") {
     return (
@@ -118,9 +153,7 @@ export function PRDClient() {
           <AlfredLogo className="size-6" />
         </div>
         <div className="flex w-full flex-col gap-2">
-          <span className="text-sm text-foreground">
-            {progress?.progressMessage ?? "Alfred is writing your PRD..."}
-          </span>
+          <LoaderFive text={progress?.progressMessage ?? "Alfred is writing your PRD..."} />
           <Progress value={progress?.progressPercent ?? 10} />
         </div>
       </div>
@@ -136,7 +169,7 @@ export function PRDClient() {
   const assumptions = (prd.assumptions as string[] | null) ?? []
 
   return (
-    <div className="flex max-w-[700px] flex-col gap-6 py-6">
+    <div className="flex max-w-[860px] flex-col gap-6 py-6">
       {prd.scopeWarning && (
         <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 px-4 py-4">
           <WarningCircleIcon className="mt-0.5 size-4 shrink-0 text-warning" />
@@ -147,67 +180,46 @@ export function PRDClient() {
         </div>
       )}
 
-      <Section title="Problem Statement" index={0}>
-        <p className="text-sm text-foreground">{prd.problemStatement}</p>
-      </Section>
-      <Separator />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <PRDCard title="Problem Statement" index={0} className="md:col-span-2">
+          <p className="text-sm text-foreground">{prd.problemStatement}</p>
+        </PRDCard>
 
-      <Section title="Goals" index={1}>
-        <BulletList items={goals} />
-      </Section>
-      <Separator />
+        <PRDCard title="Goals" index={1}>
+          <BulletList items={goals} />
+        </PRDCard>
 
-      <Section title="Non Goals" index={2}>
-        <BulletList items={nonGoals} />
-      </Section>
-      <Separator />
+        <PRDCard title="Non Goals" index={2}>
+          <BulletList items={nonGoals} />
+        </PRDCard>
 
-      <Section title="User Stories" index={3}>
-        <div className="flex flex-col gap-2">
-          {userStories.map((story, i) => (
-            <div key={i} className="rounded-lg bg-muted px-4 py-3 text-sm text-foreground">
-              {story}
-            </div>
-          ))}
-        </div>
-      </Section>
-      <Separator />
+        <PRDCard title="User Stories" index={3} className="md:col-span-2">
+          <div className="flex flex-col gap-2">
+            {userStories.map((story, i) => (
+              <div key={i} className="rounded-lg bg-muted px-4 py-3 text-sm text-foreground">
+                {story}
+              </div>
+            ))}
+          </div>
+        </PRDCard>
 
-      <Section title="Acceptance Criteria" index={4}>
-        <NumberedList items={acceptanceCriteria} />
-      </Section>
-      <Separator />
+        <PRDCard title="Acceptance Criteria" index={4}>
+          <NumberedList items={acceptanceCriteria} />
+        </PRDCard>
 
-      <Section title="Edge Cases" index={5}>
-        <BulletList items={edgeCases} />
-      </Section>
-      <Separator />
+        <PRDCard title="Edge Cases" index={5}>
+          <BulletList items={edgeCases} />
+        </PRDCard>
 
-      <Section title="Success Metrics" index={6}>
-        <BulletList items={successMetrics} />
-      </Section>
+        <PRDCard title="Success Metrics" index={6} className={assumptions.length === 0 ? "md:col-span-2" : undefined}>
+          <BulletList items={successMetrics} />
+        </PRDCard>
 
-      {assumptions.length > 0 && (
-        <>
-          <Separator />
-          <Section title="Assumptions" index={7}>
+        {assumptions.length > 0 && (
+          <PRDCard title="Assumptions" index={7}>
             <BulletList items={assumptions} />
-          </Section>
-        </>
-      )}
-
-      <div className="flex flex-col items-center gap-2 pt-4">
-        <Button
-          className="w-full"
-          disabled={isApproving}
-          onClick={() => approvePRD.mutate({ workspaceId, featureId })}
-        >
-          {isApproving && <SpinnerIcon className="size-4 animate-spin" />}
-          {isApproving ? "Generating tasks..." : "Approve PRD"}
-        </Button>
-        <span className="text-xs text-muted-foreground">
-          Approving will generate engineering tasks
-        </span>
+          </PRDCard>
+        )}
       </div>
     </div>
   )

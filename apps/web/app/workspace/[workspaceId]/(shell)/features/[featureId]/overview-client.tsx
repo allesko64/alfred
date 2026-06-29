@@ -1,15 +1,18 @@
 "use client"
 
-import Link from "next/link"
+import { useMemo } from "react"
 import { useParams } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
-import { ArrowRightIcon, WarningCircleIcon } from "@phosphor-icons/react"
+import { WarningCircleIcon } from "@phosphor-icons/react"
 
 import { useTRPC } from "@/lib/trpc/client"
+import { formatRelativeTime } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Progress } from "@/components/ui/progress"
 import { AlfredAvatar, MessageBubble } from "@/components/workspace/conversation"
 import type { ConversationMessage } from "@/components/workspace/conversation"
+import { NextStepLink } from "@/components/workspace/feature-detail/next-step-link"
+import { useSetFeatureHeaderAction } from "@/components/workspace/feature-detail/feature-header-actions"
 
 export function OverviewClient() {
   const { workspaceId, featureId } = useParams<{ workspaceId: string; featureId: string }>()
@@ -36,28 +39,56 @@ export function OverviewClient() {
     ),
   )
 
+  useSetFeatureHeaderAction(
+    useMemo(() => {
+      if (!isPRDReady) return null
+      return (
+        <NextStepLink
+          href={`/workspace/${workspaceId}/features/${featureId}/prd`}
+          label={feature?.approvedAt ? "View your PRD" : "Your PRD is ready"}
+        />
+      )
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isPRDReady, feature?.approvedAt, workspaceId, featureId]),
+  )
+
   return (
-    <div className="flex flex-col gap-6 py-6">
-      <div className="flex max-w-[700px] flex-col gap-6">
+    // items-center centers the conversation column within this content area,
+    // which already excludes the sidebar (shell layout offsets with pl-60) —
+    // so this centers relative to the content area, not the full viewport.
+    <div className="flex flex-col items-center gap-6 py-6">
+      <div className="flex w-full max-w-[700px] flex-col gap-2">
         {isLoading ? (
           <Skeleton className="h-32 w-full" />
         ) : (
-          messages?.map((message) => (
-            <MessageBubble
-              key={message.id}
-              message={{
-                id: message.id,
-                role: message.role,
-                content: message.content,
-                options: message.options as string[] | null,
-              } satisfies ConversationMessage}
-            />
-          ))
+          messages?.map((message, index) => {
+            const previous = messages[index - 1]
+            const isNewExchange = index > 0 && message.role === "alfred" && previous?.role === "user"
+
+            return (
+              <div key={message.id} className={isNewExchange ? "pt-6" : undefined}>
+                {isNewExchange && (
+                  <div className="pb-2 text-center text-[11px] text-muted-foreground/60">
+                    {formatRelativeTime(message.createdAt)}
+                  </div>
+                )}
+                <MessageBubble
+                  message={{
+                    id: message.id,
+                    role: message.role,
+                    content: message.content,
+                    options: message.options as string[] | null,
+                    createdAt: message.createdAt,
+                  } satisfies ConversationMessage}
+                />
+              </div>
+            )
+          })
         )}
       </div>
 
       {isWritingPRD && (
-        <div className="flex max-w-[700px] items-center gap-4 rounded-lg bg-muted px-4 py-4">
+        <div className="flex w-full max-w-[700px] items-center gap-4 rounded-lg bg-muted px-4 py-4">
           <AlfredAvatar pulse />
           <div className="flex flex-1 flex-col gap-2">
             <span className="text-sm text-foreground">
@@ -69,23 +100,13 @@ export function OverviewClient() {
       )}
 
       {feature && isRejected && (
-        <div className="flex max-w-[700px] items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-4">
+        <div className="flex w-full max-w-[700px] items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-4">
           <WarningCircleIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
           <div className="flex flex-col gap-1">
             <span className="text-sm font-medium text-destructive">PRD generation was blocked</span>
             <span className="text-xs text-muted-foreground">{feature.rejectionReason}</span>
           </div>
         </div>
-      )}
-
-      {isPRDReady && (
-        <Link
-          href={`/workspace/${workspaceId}/features/${featureId}/prd`}
-          className="flex max-w-[700px] items-center justify-between gap-3 rounded-lg border-l-2 border-l-primary bg-card px-4 py-4 hover:bg-muted"
-        >
-          <span className="text-sm font-medium text-foreground">Your PRD is ready</span>
-          <ArrowRightIcon className="size-4 text-primary" />
-        </Link>
       )}
     </div>
   )

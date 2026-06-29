@@ -50,6 +50,20 @@
       "when": 1782664203940,
       "tag": "0006_worthless_whistler",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782712707366,
+      "tag": "0007_ordinary_selene",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782715202021,
+      "tag": "0008_eminent_sway",
+      "breakpoints": true
     }
   ]
 }

@@ -9,6 +9,7 @@ interface ProgressPatch {
   progressMessage?: string;
   progressPercent?: number;
   errorMessage?: string | null;
+  scheduledAt?: Date | null;
 }
 
 /** Upserts the workflow_runs row for a (featureId, workflowType) pair so the UI can poll progress. */
@@ -42,6 +43,7 @@ export async function reportWorkflowProgress(
     progressMessage: patch.progressMessage,
     progressPercent: patch.progressPercent ?? 0,
     errorMessage: patch.errorMessage ?? undefined,
+    scheduledAt: patch.scheduledAt ?? undefined,
     startedAt: new Date(),
     completedAt,
   });
