@@ -1,3 +1,6 @@
+import { users } from "@alfred/db";
+import { updateDigestPreferencesSchema } from "@alfred/validators";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc";
 
@@ -11,4 +14,31 @@ export const userRouter = createTRPCRouter({
   getSession: protectedProcedure.query(({ ctx }) => {
     return { user: ctx.user };
   }),
+
+  getDigestPreferences: protectedProcedure.query(async ({ ctx }) => {
+    const [user] = await ctx.db
+      .select({
+        digestEnabled: users.digestEnabled,
+        digestHourLocal: users.digestHourLocal,
+        digestTimezone: users.digestTimezone,
+      })
+      .from(users)
+      .where(eq(users.id, ctx.user.id))
+      .limit(1);
+
+    return (
+      user ?? { digestEnabled: true, digestHourLocal: 9, digestTimezone: "UTC" }
+    );
+  }),
+
+  updateDigestPreferences: protectedProcedure
+    .input(updateDigestPreferencesSchema)
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db
+        .update(users)
+        .set({ ...input, updatedAt: new Date() })
+        .where(eq(users.id, ctx.user.id));
+
+      return { ok: true };
+    }),
 });

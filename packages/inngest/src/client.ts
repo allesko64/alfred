@@ -56,3 +56,19 @@ export interface FeaturePRResyncRequested {
     pullRequestId: string;
   };
 }
+
+/** Fired automatically once an AI review passes with zero blocking issues, and from the manual "Re-check" button on the Approval tab. */
+export interface FeatureReleaseReadinessRequested {
+  name: "feature/release-readiness.requested";
+  data: {
+    featureId: string;
+  };
+}
+
+/** Fired right after a feature ships (10.3) to write its changelog entry (10.4). */
+export interface FeatureChangelogGenerationRequested {
+  name: "feature/changelog-generation.requested";
+  data: {
+    featureId: string;
+  };
+}

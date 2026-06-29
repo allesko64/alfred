@@ -6,3 +6,4 @@ export * from "./task.schema";
 export * from "./github.schema";
 export * from "./invite.schema";
 export * from "./prd.schema";
+export * from "./user.schema";

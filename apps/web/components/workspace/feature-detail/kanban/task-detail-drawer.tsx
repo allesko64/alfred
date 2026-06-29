@@ -76,7 +76,12 @@ export function TaskDetailDrawer({
 
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="task-title">Title</Label>
-                <Input id="task-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+                <Input
+                  id="task-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="rounded-lg"
+                />
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -85,7 +90,7 @@ export function TaskDetailDrawer({
                   id="task-description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="min-h-32"
+                  className="min-h-32 rounded-lg"
                 />
               </div>
 
@@ -93,7 +98,7 @@ export function TaskDetailDrawer({
                 <div className="flex flex-1 flex-col gap-1.5">
                   <Label>Priority</Label>
                   <Select value={priority} onValueChange={(value) => setPriority(value as TaskPriority)}>
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className="w-full rounded-lg">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -109,7 +114,7 @@ export function TaskDetailDrawer({
                 <div className="flex flex-1 flex-col gap-1.5">
                   <Label>Assignee</Label>
                   <Select value={assignedTo} onValueChange={(value) => setAssignedTo(value ?? UNASSIGNED)}>
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className="w-full rounded-lg">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

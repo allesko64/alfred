@@ -1,8 +1,19 @@
 import type { Metadata } from "next"
+import { Geist, JetBrains_Mono } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { GlobalThemeToggle } from "@/components/global-theme-toggle"
 import { TRPCReactProvider } from "@/lib/trpc/Provider"
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+})
+
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
+  subsets: ["latin"],
+})
 
 export const metadata: Metadata = {
   title: "Alfred — Your AI Delivery Butler",
@@ -15,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${jetbrainsMono.variable}`}>
       <body>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
           <TRPCReactProvider>

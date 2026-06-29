@@ -12,6 +12,7 @@ import {
   tasks,
 } from "@alfred/db";
 import { and, desc, eq, sql } from "drizzle-orm";
+import { inngest } from "../client";
 import { reportWorkflowProgress } from "../workflow-runs";
 
 /** Inngest's `step.run` signature, decoupled from Inngest's own types so this core can be shared by multiple `createFunction` handlers. */
@@ -661,6 +662,12 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
       progressPercent: 100,
     });
   });
+
+  if (result.blocking_count === 0) {
+    await run("trigger-release-readiness-check", async () => {
+      await inngest.send({ name: "feature/release-readiness.requested", data: { featureId } });
+    });
+  }
 
   return { status: "reviewed", reviewNumber };
 }

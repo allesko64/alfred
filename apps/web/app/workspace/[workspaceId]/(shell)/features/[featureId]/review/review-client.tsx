@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import {
@@ -109,6 +109,7 @@ function ReviewResults({
 }) {
   const trpc = useTRPC()
   const queryClient = useQueryClient()
+  const router = useRouter()
 
   const requestReviewNow = useMutation(
     trpc.github.requestReviewNow.mutationOptions({
@@ -138,7 +139,10 @@ function ReviewResults({
           )}
         </div>
         {canShip ? (
-          <Button size="sm" onClick={() => toast("Ship flow lands in Phase 10")}>
+          <Button
+            size="sm"
+            onClick={() => router.push(`/workspace/${workspaceId}/features/${featureId}/approval`)}
+          >
             <RocketLaunchIcon />
             Approve &amp; Ship
           </Button>

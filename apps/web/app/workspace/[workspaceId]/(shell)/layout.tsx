@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/workspace/sidebar"
+import { WorkspaceEventsListener } from "@/components/workspace/workspace-events-listener"
 
 export default async function WorkspaceShellLayout({
   children,
@@ -11,6 +12,7 @@ export default async function WorkspaceShellLayout({
 
   return (
     <>
+      <WorkspaceEventsListener workspaceId={workspaceId} />
       <Sidebar workspaceId={workspaceId} />
       <div className="pl-60">{children}</div>
     </>

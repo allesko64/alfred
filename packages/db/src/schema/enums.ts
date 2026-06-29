@@ -103,6 +103,7 @@ export const workflowTypeEnum = pgEnum("workflow_type", [
   "re_review",
   "release_readiness",
   "repo_vectorization",
+  "changelog_generation",
 ]);
 
 export const workflowStatusEnum = pgEnum("workflow_status", [

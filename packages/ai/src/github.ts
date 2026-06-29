@@ -147,6 +147,54 @@ export async function upsertPullRequestComment(
   return data.id;
 }
 
+export interface RepoTreeEntry {
+  path: string;
+  type: string;
+  size?: number;
+}
+
+/** Fetches the full recursive git tree for a repository's default branch. */
+export async function getRepositoryTree(
+  installationId: number,
+  owner: string,
+  repo: string,
+  branch: string,
+): Promise<RepoTreeEntry[]> {
+  const octokit = await getInstallationOctokit(installationId);
+
+  const { data } = await octokit.git.getTree({
+    owner,
+    repo,
+    tree_sha: branch,
+    recursive: "true",
+  });
+
+  return data.tree.map((entry) => ({
+    path: entry.path ?? "",
+    type: entry.type ?? "",
+    size: entry.size,
+  }));
+}
+
+/** Fetches a single file's text content at the given ref. Returns null for non-file entries (directories, submodules) or content that isn't plain text. */
+export async function getFileContent(
+  installationId: number,
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string,
+): Promise<string | null> {
+  const octokit = await getInstallationOctokit(installationId);
+
+  const { data } = await octokit.repos.getContent({ owner, repo, path, ref });
+
+  if (Array.isArray(data) || data.type !== "file" || !data.content) {
+    return null;
+  }
+
+  return Buffer.from(data.content, data.encoding as BufferEncoding).toString("utf-8");
+}
+
 export interface GithubUserProfile {
   username: string;
   name: string | null;

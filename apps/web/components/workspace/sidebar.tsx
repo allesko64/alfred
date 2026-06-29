@@ -11,6 +11,7 @@ import {
   GithubLogoIcon,
   HouseIcon,
   PlusIcon,
+  ScrollIcon,
   SignOutIcon,
   SparkleIcon,
   UserCircleIcon,
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
   { label: "Dashboard", icon: HouseIcon, segment: "dashboard" },
   { label: "Features", icon: SparkleIcon, segment: "features", color: PHASE_COLORS.amber },
   { label: "GitHub", icon: GithubLogoIcon, segment: "github" },
+  { label: "Changelog", icon: ScrollIcon, segment: "changelog" },
 ] as const
 
 const BOTTOM_ITEMS = [

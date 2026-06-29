@@ -11,3 +11,4 @@ export * from "./billing";
 export * from "./invites";
 export * from "./codeChunks";
 export * from "./workflowRuns";
+export * from "./changelog";

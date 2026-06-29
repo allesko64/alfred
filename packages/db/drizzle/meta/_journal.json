@@ -64,6 +64,20 @@
       "when": 1782715202021,
       "tag": "0008_eminent_sway",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782728215341,
+      "tag": "0009_foamy_harpoon",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782729208233,
+      "tag": "0010_high_crystal",
+      "breakpoints": true
     }
   ]
 }

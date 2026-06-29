@@ -1,4 +1,5 @@
 import { billingRouter } from "./routers/billing.router";
+import { changelogRouter } from "./routers/changelog.router";
 import { featureRouter } from "./routers/feature.router";
 import { githubRouter } from "./routers/github.router";
 import { notificationRouter } from "./routers/notification.router";
@@ -21,6 +22,7 @@ export const appRouter = createTRPCRouter({
   review: reviewRouter,
   notification: notificationRouter,
   billing: billingRouter,
+  changelog: changelogRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -14,3 +14,16 @@ export const submitClarificationReplySchema = z.object({
 });
 
 export type SubmitClarificationReplyInput = z.infer<typeof submitClarificationReplySchema>;
+
+export const approveFeatureSchema = z.object({
+  featureId: z.string().uuid(),
+});
+
+export type ApproveFeatureInput = z.infer<typeof approveFeatureSchema>;
+
+export const rejectFeatureSchema = z.object({
+  featureId: z.string().uuid(),
+  reason: z.string().min(1, "A reason is required"),
+});
+
+export type RejectFeatureInput = z.infer<typeof rejectFeatureSchema>;

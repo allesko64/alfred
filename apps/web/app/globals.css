@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=DM+Mono:wght@400&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -42,7 +41,8 @@
   --danger-color: #DC2626;
 
   /* Typography */
---font-sans: 'Inter', sans-serif;  --font-mono: 'DM Mono', monospace;
+  --font-sans: var(--font-geist-sans), 'Geist', sans-serif;
+  --font-mono: var(--font-jetbrains-mono), 'JetBrains Mono', monospace;
 
   --text-xs: 12px;
   --text-sm: 13px;
@@ -53,8 +53,10 @@
   --text-hero: clamp(44px, 6vw, 64px);
 
   --weight-light: 300;
-  --weight-regular: 400;
+  --weight-regular: 450;
   --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
 
   --leading-hero: 1.05;
   --leading-section: 1.2;
@@ -192,6 +194,10 @@
   --color-warning-foreground: var(--warning-foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
+  --font-weight-normal: var(--weight-regular);
+  --font-weight-medium: var(--weight-medium);
+  --font-weight-semibold: var(--weight-semibold);
+  --font-weight-bold: var(--weight-bold);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -212,8 +218,12 @@
     line-height: var(--leading-body);
     font-feature-settings: "rlig" 1, "calt" 1;
   }
-  h1, h2, h3 {
-    font-weight: var(--weight-medium);
+  h1 {
+    font-weight: var(--weight-bold);
+    color: var(--text-primary);
+  }
+  h2, h3 {
+    font-weight: var(--weight-semibold);
     color: var(--text-primary);
   }
   code, pre, kbd, samp {
@@ -309,7 +319,7 @@
 .hero-heading {
   font-family: var(--font-sans);
   font-size: var(--text-hero);
-  font-weight: var(--weight-light);
+  font-weight: var(--weight-bold);
   line-height: var(--leading-hero);
   letter-spacing: var(--tracking-normal);
 }
@@ -320,7 +330,7 @@
 .section-heading {
   font-family: var(--font-sans);
   font-size: var(--text-section);
-  font-weight: var(--weight-medium);
+  font-weight: var(--weight-semibold);
   line-height: var(--leading-section);
   color: var(--text-primary);
 }

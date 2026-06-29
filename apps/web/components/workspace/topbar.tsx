@@ -25,11 +25,21 @@ export function TopBar({ title, workspaceId }: { title: string; workspaceId: str
   const router = useRouter()
   const queryClient = useQueryClient()
 
-  const { data: unread } = useQuery(trpc.notification.getUnread.queryOptions())
+  const { data: unread } = useQuery(
+    trpc.notification.getUnread.queryOptions(undefined, { refetchInterval: 30000 }),
+  )
   const unreadCount = unread?.length ?? 0
 
   const markRead = useMutation(
     trpc.notification.markRead.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: trpc.notification.getUnread.queryKey() })
+      },
+    }),
+  )
+
+  const markAllRead = useMutation(
+    trpc.notification.markAllRead.mutationOptions({
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: trpc.notification.getUnread.queryKey() })
       },
@@ -73,7 +83,18 @@ export function TopBar({ title, workspaceId }: { title: string; workspaceId: str
             )}
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+            <div className="flex items-center justify-between px-2 py-1.5">
+              <DropdownMenuLabel className="p-0">Notifications</DropdownMenuLabel>
+              {unreadCount > 0 && (
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => markAllRead.mutate()}
+                >
+                  Mark all as read
+                </button>
+              )}
+            </div>
             <DropdownMenuSeparator />
             {unread?.length ? (
               unread.map((notification) => (

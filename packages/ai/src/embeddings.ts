@@ -36,6 +36,28 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
   return response.data.map((item) => item.embedding);
 }
 
+/** Rough chars-per-token ratio used to size chunks without a real tokenizer. */
+const CHARS_PER_CHUNK = 500 * 4;
+
+/** Splits file content into ~500-token chunks, breaking on line boundaries so chunks stay readable. */
+export function chunkContent(content: string): string[] {
+  const lines = content.split("\n");
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const line of lines) {
+    if (current.length + line.length + 1 > CHARS_PER_CHUNK && current.length > 0) {
+      chunks.push(current);
+      current = line;
+    } else {
+      current = current.length === 0 ? line : `${current}\n${line}`;
+    }
+  }
+
+  if (current.length > 0) chunks.push(current);
+  return chunks;
+}
+
 export function cosineSimilarity(a: number[], b: number[]): number {
   let dot = 0;
   let normA = 0;

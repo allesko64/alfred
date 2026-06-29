@@ -1,7 +1,13 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import { ChatsCircleIcon, FileTextIcon, ListChecksIcon, MagnifyingGlassIcon } from "@phosphor-icons/react"
+import {
+  ChatsCircleIcon,
+  FileTextIcon,
+  ListChecksIcon,
+  MagnifyingGlassIcon,
+  SealCheckIcon,
+} from "@phosphor-icons/react"
 
 import { cn } from "@/lib/utils"
 import { FloatingDock } from "@/components/ui/floating-dock"
@@ -11,18 +17,19 @@ const DOCK_ITEMS = [
   { title: "PRD", icon: FileTextIcon, segment: "prd" },
   { title: "Tasks", icon: ListChecksIcon, segment: "tasks" },
   { title: "Review", icon: MagnifyingGlassIcon, segment: "review" },
+  { title: "Approval", icon: SealCheckIcon, segment: "approval" },
 ] as const
 
 export function FeatureFloatingDock({
   workspaceId,
   featureId,
   pulseSegment,
-  mutedSegment,
+  mutedSegments,
 }: {
   workspaceId: string
   featureId: string
   pulseSegment?: string
-  mutedSegment?: string
+  mutedSegments?: string[]
 }) {
   const pathname = usePathname()
   const basePath = `/workspace/${workspaceId}/features/${featureId}`
@@ -31,7 +38,7 @@ export function FeatureFloatingDock({
     const href = item.segment ? `${basePath}/${item.segment}` : basePath
     const isActive = item.segment ? pathname.startsWith(href) : pathname === basePath
     const isPulsing = item.segment === pulseSegment
-    const isMuted = item.segment === mutedSegment
+    const isMuted = !!mutedSegments?.includes(item.segment)
 
     return {
       title: item.title,

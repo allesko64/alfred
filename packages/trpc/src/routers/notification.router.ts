@@ -13,18 +13,25 @@ export const notificationRouter = createTRPCRouter({
     return ctx.db
       .select()
       .from(notifications)
-      .where(and(eq(notifications.userId, ctx.user.id), eq(notifications.isRead, false)))
+      .where(
+        and(
+          eq(notifications.userId, ctx.user.id),
+          eq(notifications.isRead, false),
+        ),
+      )
       .orderBy(desc(notifications.createdAt));
   }),
 
-  getWorkspaceActivity: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
-    return ctx.db
-      .select()
-      .from(notifications)
-      .where(eq(notifications.workspaceId, ctx.workspaceId))
-      .orderBy(desc(notifications.createdAt))
-      .limit(20);
-  }),
+  getWorkspaceActivity: workspaceProcedure
+    .input(workspaceInputSchema)
+    .query(async ({ ctx }) => {
+      return ctx.db
+        .select()
+        .from(notifications)
+        .where(eq(notifications.workspaceId, ctx.workspaceId))
+        .orderBy(desc(notifications.createdAt))
+        .limit(20);
+    }),
 
   markRead: protectedProcedure
     .input(z.object({ notificationId: z.string().uuid() }))
@@ -32,8 +39,27 @@ export const notificationRouter = createTRPCRouter({
       await ctx.db
         .update(notifications)
         .set({ isRead: true })
-        .where(and(eq(notifications.id, input.notificationId), eq(notifications.userId, ctx.user.id)));
+        .where(
+          and(
+            eq(notifications.id, input.notificationId),
+            eq(notifications.userId, ctx.user.id),
+          ),
+        );
 
       return { ok: true };
     }),
+
+  markAllRead: protectedProcedure.mutation(async ({ ctx }) => {
+    await ctx.db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(
+        and(
+          eq(notifications.userId, ctx.user.id),
+          eq(notifications.isRead, false),
+        ),
+      );
+
+    return { ok: true };
+  }),
 });

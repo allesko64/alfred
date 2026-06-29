@@ -1,5 +1,6 @@
 import {
   boolean,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -14,6 +15,9 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   githubUsername: text("github_username").unique(),
   githubAccessToken: text("github_access_token"),
+  digestEnabled: boolean("digest_enabled").notNull().default(true),
+  digestHourLocal: integer("digest_hour_local").notNull().default(9),
+  digestTimezone: text("digest_timezone").notNull().default("UTC"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
