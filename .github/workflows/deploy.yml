@@ -1,0 +1,49 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check-types
+      - run: pnpm run lint
+      - run: pnpm run build
+        env:
+          DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder"
+          BETTER_AUTH_SECRET: "placeholder"
+          BETTER_AUTH_URL: "http://localhost:3000"
+          NEXT_PUBLIC_BETTER_AUTH_URL: "http://localhost:3000"
+          NODE_OPTIONS: "--max-old-space-size=3072"
+
+  deploy:
+    needs: build-and-typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+            git fetch origin main
+            git reset --hard origin/main
+            pnpm install --frozen-lockfile
+            export NODE_OPTIONS="--max-old-space-size=3072"
+            pnpm --filter @alfred/db db:migrate
+            pnpm run build
+            pm2 reload alfred-web --update-env
