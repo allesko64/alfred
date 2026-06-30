@@ -16,7 +16,7 @@ export function BranchNameBanner({ featureId }: { featureId: string }) {
   }
 
   return (
-    <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
+    <div className="flex items-center gap-2 text-sm text-muted-foreground/70">
       <span>
         Name your branch <code className="rounded bg-muted px-1.5 py-0.5 text-foreground/70">{branchName}</code> to
         auto-link your PR

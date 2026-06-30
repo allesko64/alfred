@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
-import { PencilSimpleIcon } from "@phosphor-icons/react"
+import { BrainIcon, PencilSimpleIcon } from "@phosphor-icons/react"
 
 import { AlfredAvatar } from "./alfred-avatar"
 import type { ConversationMessage } from "./types"
@@ -46,9 +46,9 @@ export function MessageBubble({
       initial={{ opacity: 0, y: 12, filter: "blur(4px)" }}
       animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
       transition={{ duration: 0.25 }}
-      className="grid grid-cols-[28px_1fr] items-start gap-3"
+      className="grid grid-cols-[32px_1fr] items-start gap-3"
     >
-      <AlfredAvatar />
+      <AlfredAvatar icon={BrainIcon} />
       <div className="flex flex-col gap-2">
         <div className="max-w-[70%] rounded-lg bg-muted px-4 py-3 text-sm text-foreground">
           {message.content}
@@ -64,14 +64,14 @@ export function MessageBubble({
                   key={option}
                   type="button"
                   onClick={() => onOptionClick?.(option)}
-                  className="inline-flex w-fit items-center rounded-full border border-border bg-card px-3 py-1.5 text-xs text-foreground transition-colors hover:border-[#0075DE] hover:text-[#0075DE]"
+                  className="inline-flex w-fit items-center rounded-full border border-border bg-card px-3 py-1.5 text-sm text-foreground transition-colors hover:border-[#0075DE] hover:text-[#0075DE]"
                 >
                   {option}
                 </button>
               ) : (
                 <span
                   key={option}
-                  className="inline-flex w-fit items-center rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground"
+                  className="inline-flex w-fit items-center rounded-full border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground"
                 >
                   {option}
                 </span>
@@ -81,13 +81,13 @@ export function MessageBubble({
               <button
                 type="button"
                 onClick={() => setCustomSelected(true)}
-                className="inline-flex w-fit items-center gap-1 px-1 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                className="inline-flex w-fit items-center gap-1 px-1 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
               >
                 <PencilSimpleIcon className="size-3" />
                 {CUSTOM_OPTION}
               </button>
             ) : (
-              <span className="inline-flex w-fit items-center gap-1 px-1 py-1.5 text-xs text-muted-foreground">
+              <span className="inline-flex w-fit items-center gap-1 px-1 py-1.5 text-sm text-muted-foreground">
                 <PencilSimpleIcon className="size-3" />
                 {CUSTOM_OPTION}
               </span>

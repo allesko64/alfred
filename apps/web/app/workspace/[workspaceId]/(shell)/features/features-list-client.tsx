@@ -50,7 +50,7 @@ export function FeaturesListClient() {
 
       <div className="flex flex-col gap-3 p-6">
         {statusFilter.length > 0 && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
             Filtered by {statusFilter.map(statusLabel).join(", ")}
             <Link
               href={`/workspace/${workspaceId}/features`}
@@ -79,7 +79,7 @@ export function FeaturesListClient() {
                     <span className="truncate text-sm font-medium text-foreground">
                       {feature.title}
                     </span>
-                    <Timestamp date={feature.updatedAt} className="truncate text-xs text-muted-foreground" />
+                    <Timestamp date={feature.updatedAt} className="truncate text-sm text-muted-foreground" />
                   </div>
                   <StatusBadge status={feature.status} className="shrink-0" />
                 </Link>

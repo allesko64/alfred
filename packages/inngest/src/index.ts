@@ -15,3 +15,4 @@ export { reReviewWorkflow } from "./workflows/re-review.workflow";
 export { releaseReadinessWorkflow } from "./workflows/release-readiness.workflow";
 export { changelogGenerationWorkflow } from "./workflows/changelog-generation.workflow";
 export { repoVectorizationWorkflow } from "./workflows/repo-vectorization.workflow";
+export { monthlyCreditResetWorkflow } from "./workflows/monthly-credit-reset.workflow";

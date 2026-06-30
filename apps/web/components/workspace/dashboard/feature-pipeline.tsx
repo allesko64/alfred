@@ -32,14 +32,14 @@ export function FeaturePipeline({ workspaceId }: { workspaceId: string }) {
                 href={`/workspace/${workspaceId}/features?status=${stage.statuses.join(",")}`}
                 className="flex items-center gap-3 hover:opacity-80"
               >
-                <span className="w-28 shrink-0 text-xs text-foreground">{stage.label}</span>
+                <span className="w-28 shrink-0 text-sm text-foreground">{stage.label}</span>
                 <div className="h-1.5 flex-1 bg-muted">
                   <div
                     className="h-full bg-foreground/60"
                     style={{ width: `${percent}%` }}
                   />
                 </div>
-                <span className="w-6 shrink-0 text-right text-xs text-muted-foreground">
+                <span className="w-6 shrink-0 text-right text-sm text-muted-foreground">
                   {stage.count}
                 </span>
               </Link>

@@ -29,7 +29,7 @@ export function GithubActivity({ workspaceId }: { workspaceId: string }) {
               <div key={pr.id} className="flex items-start gap-2.5">
                 <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                 <div className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-xs text-foreground">
+                  <span className="truncate text-sm text-foreground">
                     #{pr.githubPrNumber} {pr.title}
                   </span>
                   <span className="truncate text-[10px] text-muted-foreground">
@@ -44,7 +44,7 @@ export function GithubActivity({ workspaceId }: { workspaceId: string }) {
         ) : (
           <div className="flex flex-col items-center gap-2 py-6 text-center">
             <GitPullRequestIcon className="size-5 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">
+            <span className="text-sm text-muted-foreground">
               No pull requests yet — they&apos;ll land here once Alfred opens one.
             </span>
           </div>

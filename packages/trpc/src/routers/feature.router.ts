@@ -9,7 +9,7 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   aiReviews,
-  checkBillingLimit,
+  checkAndDeductCredits,
   clarificationMessages,
   features,
   notifications,
@@ -34,17 +34,10 @@ const PIPELINE_STAGES = [
 ] as const;
 
 export const featureRouter = createTRPCRouter({
+  /** Feature creation is always free (never gated) — only the AI clarification round it kicks off costs a credit. */
   create: workspaceProcedure
     .input(createFeatureSchema)
     .mutation(async ({ ctx, input }) => {
-      const limit = await checkBillingLimit(ctx.workspaceId, "features");
-      if (!limit.allowed) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "You've reached your free plan limit. Upgrade to Pro.",
-        });
-      }
-
       const [feature] = await ctx.db
         .insert(features)
         .values({
@@ -67,10 +60,22 @@ export const featureRouter = createTRPCRouter({
         content: input.content,
       });
 
-      await inngest.send({
-        name: "feature/clarification.requested",
-        data: { featureId: feature.id },
-      });
+      const credits = await checkAndDeductCredits(ctx.workspaceId, "clarification_message");
+      if (credits.allowed) {
+        await inngest.send({
+          name: "feature/clarification.requested",
+          data: { featureId: feature.id },
+        });
+      } else {
+        await ctx.db.insert(notifications).values({
+          userId: ctx.user.id,
+          workspaceId: ctx.workspaceId,
+          type: "credits_exhausted",
+          title: "Out of AI credits",
+          message: "This feature was created, but Alfred can't reply until your credits reset or you upgrade.",
+          featureId: feature.id,
+        });
+      }
 
       return feature;
     }),
@@ -86,6 +91,14 @@ export const featureRouter = createTRPCRouter({
 
       if (!feature) {
         throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      const credits = await checkAndDeductCredits(ctx.workspaceId, "clarification_message");
+      if (!credits.allowed) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You're out of AI credits. Upgrade or wait for your next monthly reset.",
+        });
       }
 
       await ctx.db.insert(clarificationMessages).values({

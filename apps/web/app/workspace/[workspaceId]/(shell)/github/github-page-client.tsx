@@ -103,7 +103,7 @@ export function GithubPageClient() {
 
       <div className="flex flex-col gap-8 p-6">
         <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-lg text-muted-foreground">
             Connect repositories so Alfred can watch your PRs and run AI reviews.
           </p>
           <Button onClick={handleConnect} disabled={isRedirecting}>
@@ -155,7 +155,7 @@ export function GithubPageClient() {
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-sm font-medium text-foreground">No repositories connected yet</span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-sm text-muted-foreground">
                 Connect a repo so Alfred can watch PRs and run AI reviews.
               </span>
             </div>
@@ -188,7 +188,7 @@ export function GithubPageClient() {
             {prs.length === 0 ? (
               <div className="flex flex-col items-center gap-2 rounded-lg border border-border py-10 text-center">
                 <GitPullRequestIcon className="size-5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
+                <span className="text-sm text-muted-foreground">
                   No pull requests yet — they&apos;ll land here once a PR is opened.
                 </span>
               </div>

@@ -1,6 +1,5 @@
 import {
   index,
-  integer,
   pgTable,
   text,
   timestamp,
@@ -31,7 +30,6 @@ export const features = pgTable(
     shippedAt: timestamp("shipped_at"),
     rejectedAt: timestamp("rejected_at"),
     rejectionReason: text("rejection_reason"),
-    aiCreditsUsed: integer("ai_credits_used").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

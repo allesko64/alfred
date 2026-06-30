@@ -29,12 +29,12 @@ export function PRRow({ pr, onLinkClick }: { pr: PRRowData; onLinkClick: () => v
         <span className="truncate text-sm text-foreground">
           #{pr.githubPrNumber} {pr.title}
         </span>
-        <span className="truncate text-xs text-muted-foreground">{pr.repositoryName}</span>
+        <span className="truncate text-sm text-muted-foreground">{pr.repositoryName}</span>
       </div>
       {pr.featureId ? (
-        <span className="shrink-0 text-xs text-muted-foreground">{pr.featureTitle}</span>
+        <span className="shrink-0 text-sm text-muted-foreground">{pr.featureTitle}</span>
       ) : (
-        <span className="shrink-0 text-xs text-muted-foreground/60">Unlinked</span>
+        <span className="shrink-0 text-sm text-muted-foreground/60">Unlinked</span>
       )}
       <StatusBadge status={pr.status} className="shrink-0" />
       {!pr.featureId && (

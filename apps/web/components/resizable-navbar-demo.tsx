@@ -99,7 +99,7 @@ const DummyContent = () => {
       <h1 className="mb-4 text-center text-3xl font-bold">
         Check the navbar at the top of the container
       </h1>
-      <p className="mb-10 text-center text-sm text-zinc-500">
+      <p className="mb-10 text-center text-lg text-zinc-500">
         For demo purpose we have kept the position as{" "}
         <span className="font-medium">Sticky</span>. Keep in mind that this
         component is <span className="font-medium">fixed</span> and will not

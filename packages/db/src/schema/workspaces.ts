@@ -1,5 +1,6 @@
 import {
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -26,6 +27,9 @@ export const workspaces = pgTable("workspaces", {
   billingStatus: billingStatusEnum("billing_status").notNull().default("active"),
   onboardingStep: onboardingStepEnum("onboarding_step").notNull().default("team"),
   buildingType: text("building_type"),
+  /** AI credit balance for the current monthly cycle. Resets via cron and on plan change — see billing-limits.ts. */
+  creditsRemaining: integer("credits_remaining").notNull().default(100),
+  creditsResetAt: timestamp("credits_reset_at").notNull().defaultNow(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

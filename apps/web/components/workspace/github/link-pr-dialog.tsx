@@ -69,7 +69,7 @@ export function LinkPRDialog({
           </SelectTrigger>
           <SelectContent>
             {linkablefeatures.length === 0 ? (
-              <div className="px-2 py-1.5 text-xs text-muted-foreground">No features in development</div>
+              <div className="px-2 py-1.5 text-sm text-muted-foreground">No features in development</div>
             ) : (
               linkablefeatures.map((feature) => (
                 <SelectItem key={feature.id} value={feature.id}>

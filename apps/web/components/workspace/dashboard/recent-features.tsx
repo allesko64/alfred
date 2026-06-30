@@ -33,7 +33,7 @@ export function RecentFeatures({ workspaceId }: { workspaceId: string }) {
               className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 first:border-t-0 hover:bg-muted"
             >
               <div className="flex min-w-0 flex-col">
-                <span className="truncate text-xs font-medium text-foreground">
+                <span className="truncate text-sm font-medium text-foreground">
                   {feature.title}
                 </span>
                 <span className="truncate text-[10px] text-muted-foreground">
@@ -50,7 +50,7 @@ export function RecentFeatures({ workspaceId }: { workspaceId: string }) {
             className="flex flex-col items-center gap-2 px-4 py-6 text-center hover:text-foreground"
           >
             <SparkleIcon className="size-5 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">
+            <span className="text-sm text-muted-foreground">
               Describe your first feature and Alfred will take it from here.
             </span>
           </Link>

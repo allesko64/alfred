@@ -1,13 +1,12 @@
 "use client"
 
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { BellIcon, PlusIcon } from "@phosphor-icons/react"
+import { BellIcon } from "@phosphor-icons/react"
 
 import { useTRPC } from "@/lib/trpc/client"
 import { cn, formatRelativeTime } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { Button as StatefulButton } from "@/components/ui/stateful-button"
 import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
@@ -50,7 +49,7 @@ export function TopBar({ title, workspaceId }: { title: string; workspaceId: str
   function onNotificationClick(notificationId: string, featureId: string | null) {
     markRead.mutate({ notificationId })
     if (featureId) {
-      router.push(`/workspace/${workspaceId}/features/${featureId}`)
+      router.push(`/workspace/${workspaceId}/features/${featureId}/review`)
     }
   }
 
@@ -88,7 +87,7 @@ export function TopBar({ title, workspaceId }: { title: string; workspaceId: str
               {unreadCount > 0 && (
                 <button
                   type="button"
-                  className="text-xs text-muted-foreground hover:text-foreground"
+                  className="text-sm text-muted-foreground hover:text-foreground"
                   onClick={() => markAllRead.mutate()}
                 >
                   Mark all as read
@@ -103,12 +102,9 @@ export function TopBar({ title, workspaceId }: { title: string; workspaceId: str
                   className={cn("flex-col items-start gap-0.5 whitespace-normal", !notification.featureId && "cursor-default")}
                   onClick={() => onNotificationClick(notification.id, notification.featureId)}
                 >
-                  <span className="text-xs font-medium text-foreground">
+                  <span className="text-sm font-medium text-foreground">
                     {notification.title ?? notification.type}
                   </span>
-                  {notification.message && (
-                    <span className="text-xs text-muted-foreground">{notification.message}</span>
-                  )}
                   <span className="text-[10px] text-muted-foreground">
                     {formatRelativeTime(notification.createdAt)}
                   </span>
@@ -120,10 +116,12 @@ export function TopBar({ title, workspaceId }: { title: string; workspaceId: str
           </DropdownMenuContent>
         </DropdownMenu>
         <ThemeToggle size="icon-sm" />
-        <Button render={<Link href={`/workspace/${workspaceId}/features/new`} />} nativeButton={false}>
-          <PlusIcon />
+        <StatefulButton
+          className="min-w-0 px-4 py-1.5 text-sm"
+          onClick={() => router.push(`/workspace/${workspaceId}/features/new`)}
+        >
           New Feature
-        </Button>
+        </StatefulButton>
       </div>
     </div>
   )

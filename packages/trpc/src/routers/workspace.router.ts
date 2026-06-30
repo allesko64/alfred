@@ -6,7 +6,15 @@ import {
   inviteMemberSchema,
 } from "@alfred/validators";
 import { and, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
-import { checkBillingLimit, features, users, workspaceInvites, workspaceMemberships, workspaces } from "@alfred/db";
+import {
+  checkBillingLimit,
+  features,
+  PLAN_CREDITS,
+  users,
+  workspaceInvites,
+  workspaceMemberships,
+  workspaces,
+} from "@alfred/db";
 import {
   createTRPCRouter,
   protectedProcedure,
@@ -17,8 +25,6 @@ import {
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-// Dashboard "AI credits" stat — distinct from the hard plan-gate counts in checkBillingLimit.
-const AI_CREDIT_LIMITS: Record<string, number> = { free: 5, pro: 50, team: 200 };
 const ACTIVE_STATUSES = [
   "CLARIFYING",
   "PRD_GENERATION",
@@ -105,7 +111,7 @@ export const workspaceRouter = createTRPCRouter({
 
   getDashboardStats: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
     const [workspace] = await ctx.db
-      .select({ plan: workspaces.plan })
+      .select({ plan: workspaces.plan, creditsRemaining: workspaces.creditsRemaining })
       .from(workspaces)
       .where(eq(workspaces.id, ctx.workspaceId))
       .limit(1);
@@ -125,7 +131,7 @@ export const workspaceRouter = createTRPCRouter({
         .where(and(eq(features.workspaceId, ctx.workspaceId), extra))
         .then(([row]) => row?.count ?? 0);
 
-    const [activeCount, inReviewCount, shippedThisMonthCount, creditsUsedRow] = await Promise.all([
+    const [activeCount, inReviewCount, shippedThisMonthCount] = await Promise.all([
       countFeatures(inArray(features.status, ACTIVE_STATUSES)),
       countFeatures(inArray(features.status, IN_REVIEW_STATUSES)),
       countFeatures(
@@ -135,21 +141,14 @@ export const workspaceRouter = createTRPCRouter({
           lt(features.shippedAt, nextMonthStart),
         )!,
       ),
-      ctx.db
-        .select({ used: sql<number>`coalesce(sum(${features.aiCreditsUsed}), 0)::int` })
-        .from(features)
-        .where(eq(features.workspaceId, ctx.workspaceId)),
     ]);
-
-    const aiCreditsLimit = AI_CREDIT_LIMITS[workspace.plan] ?? AI_CREDIT_LIMITS.free!;
-    const aiCreditsUsed = creditsUsedRow[0]?.used ?? 0;
 
     return {
       activeFeatures: activeCount,
       inReview: inReviewCount,
       shippedThisMonth: shippedThisMonthCount,
-      aiCreditsRemaining: Math.max(aiCreditsLimit - aiCreditsUsed, 0),
-      aiCreditsLimit,
+      aiCreditsRemaining: Math.max(workspace.creditsRemaining, 0),
+      aiCreditsLimit: PLAN_CREDITS[workspace.plan],
     };
   }),
 
@@ -195,7 +194,7 @@ export const workspaceRouter = createTRPCRouter({
       if (!limit.allowed) {
         throw new TRPCError({
           code: "FORBIDDEN",
-          message: "You've reached your free plan limit. Upgrade to Pro.",
+          message: "You've reached your plan's team member limit. Upgrade for more.",
         });
       }
 

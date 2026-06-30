@@ -24,11 +24,6 @@ export function DashboardClient() {
       return
     }
 
-    if (workspaces.length > 1) {
-      router.replace("/workspaces")
-      return
-    }
-
     const workspace = workspaces[0]!
     if (workspace.onboardingStep === "complete") {
       router.replace(`/workspace/${workspace.id}/dashboard`)
@@ -48,10 +43,10 @@ export function DashboardClient() {
         <CardTitle>Dashboard</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-lg text-muted-foreground">
           Signed in as {session?.user.email}
         </p>
-        <p className="text-sm">{hello?.greeting ?? "Loading tRPC..."}</p>
+        <p className="text-lg">{hello?.greeting ?? "Loading tRPC..."}</p>
         <Button onClick={onSignOut} variant="outline">
           Sign out
         </Button>

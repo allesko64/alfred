@@ -38,7 +38,7 @@ export function FeatureHeader({
               </div>
               {headerAction}
             </div>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-sm text-muted-foreground">
               Created by {feature.createdByName ?? feature.createdByEmail} ·{" "}
               <Timestamp date={feature.createdAt} />
             </span>

@@ -94,7 +94,7 @@ export function SearchPalette({ workspaceId }: { workspaceId: string }) {
         }
       >
         <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <span className="flex h-8 w-full items-center rounded-lg border border-input bg-background pl-8 pr-3 text-xs text-muted-foreground">
+        <span className="flex h-8 w-full items-center rounded-lg border border-input bg-background pl-8 pr-3 text-sm text-muted-foreground">
           Search features...
         </span>
         <kbd className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
@@ -128,7 +128,7 @@ export function SearchPalette({ workspaceId }: { workspaceId: string }) {
           </div>
 
           <div className="max-h-80 overflow-y-auto p-2">
-            <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+            <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
               Connect
             </div>
             {SOCIAL_LINKS.map((link) => {
@@ -139,7 +139,7 @@ export function SearchPalette({ workspaceId }: { workspaceId: string }) {
                   href={link.href}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-2 rounded-md px-2 py-2 text-xs text-foreground hover:bg-accent hover:text-accent-foreground"
+                  className="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-foreground hover:bg-accent hover:text-accent-foreground"
                   onClick={() => setOpen(false)}
                 >
                   <Icon className="size-4 text-muted-foreground" />
@@ -148,11 +148,11 @@ export function SearchPalette({ workspaceId }: { workspaceId: string }) {
               )
             })}
 
-            <div className="mt-2 px-2 py-1.5 text-xs font-medium text-muted-foreground">
+            <div className="mt-2 px-2 py-1.5 text-sm font-medium text-muted-foreground">
               {query.trim() ? "Features" : "Recent features"}
             </div>
             {results.length === 0 && (
-              <div className="px-2 py-3 text-xs text-muted-foreground">
+              <div className="px-2 py-3 text-sm text-muted-foreground">
                 No features match &quot;{query}&quot;
               </div>
             )}
@@ -163,7 +163,7 @@ export function SearchPalette({ workspaceId }: { workspaceId: string }) {
                 onClick={() => goToFeature(feature.id)}
                 onMouseEnter={() => setActiveIndex(index)}
                 className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-xs",
+                  "flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-sm",
                   index === activeIndex
                     ? "bg-accent text-accent-foreground"
                     : "text-foreground hover:bg-accent hover:text-accent-foreground",

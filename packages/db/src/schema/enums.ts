@@ -5,6 +5,7 @@ export const workspacePlanEnum = pgEnum("workspace_plan", [
   "pro",
   "team",
 ]);
+export type WorkspacePlan = (typeof workspacePlanEnum.enumValues)[number];
 
 export const billingStatusEnum = pgEnum("billing_status", [
   "active",

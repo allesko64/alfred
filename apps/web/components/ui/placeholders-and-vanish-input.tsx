@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SpinnerIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
+import { Button as StatefulButton } from "@/components/ui/stateful-button";
 
 export function PlaceholdersAndVanishInput({
   placeholders,
@@ -193,7 +194,7 @@ export function PlaceholdersAndVanishInput({
     >
       <canvas
         className={cn(
-          "absolute pointer-events-none  text-base transform scale-50 top-[40%] left-2 sm:left-4 origin-top-left filter invert dark:invert-0 pr-20",
+          "absolute pointer-events-none  text-lg transform scale-50 top-[40%] left-2 sm:left-4 origin-top-left filter invert dark:invert-0 pr-20",
           !animating ? "opacity-0" : "opacity-100"
         )}
         ref={canvasRef}
@@ -216,13 +217,13 @@ export function PlaceholdersAndVanishInput({
         )}
       />
 
-      <button
+      <StatefulButton
         disabled={!value || disabled}
         type="submit"
-        className="absolute right-2 top-1/2 z-50 -translate-y-1/2 h-8 w-8 rounded-full disabled:bg-gray-100 bg-black dark:bg-zinc-900 dark:disabled:bg-zinc-800 transition duration-200 flex items-center justify-center"
+        className="absolute right-2 top-1/2 z-50 size-8 min-w-0 -translate-y-1/2 justify-center gap-0 rounded-full p-0"
       >
         {isThinking ? (
-          <SpinnerIcon className="h-4 w-4 animate-spin text-gray-300" />
+          <SpinnerIcon className="h-4 w-4 animate-spin text-white" />
         ) : (
           <motion.svg
             xmlns="http://www.w3.org/2000/svg"
@@ -234,7 +235,7 @@ export function PlaceholdersAndVanishInput({
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="text-gray-300 h-4 w-4"
+            className="text-white h-4 w-4"
           >
             <path stroke="none" d="M0 0h24v24H0z" fill="none" />
             <motion.path
@@ -255,7 +256,7 @@ export function PlaceholdersAndVanishInput({
             <path d="M13 6l6 6" />
           </motion.svg>
         )}
-      </button>
+      </StatefulButton>
 
       <div className="absolute inset-0 flex items-center rounded-lg pointer-events-none">
         <AnimatePresence mode="wait">

@@ -10,35 +10,14 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
+import { Pricing } from "@/components/pricing"
+import { PRICING_PLANS } from "@/lib/pricing-plans"
 
 const USAGE_LABELS: Record<string, string> = {
-  features: "Features",
-  prd_generations: "PRD generations",
-  ai_reviews: "AI reviews",
+  credits: "AI credits used",
   repos: "Connected repos",
   members: "Team members",
 }
-
-const PLANS = [
-  {
-    id: "free" as const,
-    name: "Free",
-    price: "₹0",
-    features: ["3 features", "2 PRD generations", "5 AI reviews", "1 connected repo", "1 team member"],
-  },
-  {
-    id: "pro" as const,
-    name: "Pro",
-    price: "₹999/mo",
-    features: ["Unlimited features", "Unlimited PRD generations", "Unlimited AI reviews", "Unlimited repos & members"],
-  },
-  {
-    id: "team" as const,
-    name: "Team",
-    price: "₹2999/mo",
-    features: ["Everything in Pro", "Priority support", "Team-wide usage analytics"],
-  },
-]
 
 export function BillingClient() {
   const { workspaceId } = useParams<{ workspaceId: string }>()
@@ -86,9 +65,7 @@ export function BillingClient() {
         <Card className="max-w-[480px]">
           <CardHeader>
             <CardTitle>Usage</CardTitle>
-            <CardDescription>
-              {plan === "free" ? "Free plan limits" : "Unlimited on your current plan"}
-            </CardDescription>
+            <CardDescription>Credits reset monthly. Features, tasks, and PRDs are always unlimited.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {usage &&
@@ -99,7 +76,7 @@ export function BillingClient() {
 
                 return (
                   <Progress key={type} value={isUnlimited ? null : percent}>
-                    <div className="flex w-full items-center justify-between text-xs">
+                    <div className="flex w-full items-center justify-between text-sm">
                       <span className="text-foreground">{USAGE_LABELS[type] ?? type}</span>
                       <span className="text-muted-foreground tabular-nums">
                         {isUnlimited ? "Unlimited" : `${result.current}/${result.limit}`}
@@ -111,37 +88,29 @@ export function BillingClient() {
           </CardContent>
         </Card>
 
-        <div className="flex flex-wrap gap-4">
-          {PLANS.map((p) => (
-            <Card key={p.id} className="w-64">
-              <CardHeader>
-                <CardTitle>{p.name}</CardTitle>
-                <CardDescription>{p.price}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
-                  {p.features.map((feature) => (
-                    <li key={feature}>{feature}</li>
-                  ))}
-                </ul>
-                {p.id === "free" ? (
-                  <Button size="sm" variant="secondary" disabled className="self-start">
-                    {plan === "free" ? "Current plan" : "Free"}
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    className="self-start"
-                    disabled={plan === p.id || checkout.isPending}
-                    onClick={() => checkout.mutate({ workspaceId, plan: p.id })}
-                  >
-                    {plan === p.id ? "Current plan" : checkout.isPending ? "Redirecting..." : "Upgrade"}
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <Pricing
+          plans={PRICING_PLANS}
+          title="Plans"
+          description="Upgrade or downgrade your workspace plan at any time."
+          showToggle={false}
+          currentPlanId={plan}
+          renderAction={(p) => (
+            <Button
+              variant={p.isPopular ? "default" : "outline"}
+              className="w-full rounded-md font-bold"
+              disabled={plan === p.id || p.id === "free" || checkout.isPending}
+              onClick={() => checkout.mutate({ workspaceId, plan: p.id as "pro" | "team" })}
+            >
+              {plan === p.id
+                ? "Current plan"
+                : p.id === "free"
+                  ? "Free"
+                  : checkout.isPending
+                    ? "Redirecting..."
+                    : "Upgrade"}
+            </Button>
+          )}
+        />
       </div>
     </div>
   )

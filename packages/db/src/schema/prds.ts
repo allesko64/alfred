@@ -25,8 +25,6 @@ export const prds = pgTable("prds", {
   nonGoals: jsonb("non_goals"),
   userStories: jsonb("user_stories"),
   acceptanceCriteria: jsonb("acceptance_criteria"),
-  edgeCases: jsonb("edge_cases"),
-  successMetrics: jsonb("success_metrics"),
   assumptions: jsonb("assumptions"),
   scopeWarning: text("scope_warning"),
   rawContent: text("raw_content"),

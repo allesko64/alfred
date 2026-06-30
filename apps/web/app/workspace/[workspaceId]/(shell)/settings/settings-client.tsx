@@ -55,7 +55,7 @@ export function SettingsClient() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <label className="flex items-center gap-2 text-xs text-foreground">
+            <label className="flex items-center gap-2 text-sm text-foreground">
               <input
                 type="checkbox"
                 checked={digestEnabled}
@@ -72,7 +72,7 @@ export function SettingsClient() {
                 value={digestHourLocal}
                 disabled={!digestEnabled}
                 onChange={(e) => setDigestHourLocal(Number(e.target.value))}
-                className="h-8 w-32 rounded-lg border border-input bg-transparent px-2 text-xs disabled:opacity-50"
+                className="h-8 w-32 rounded-lg border border-input bg-transparent px-2 text-sm disabled:opacity-50"
               >
                 {HOURS.map((hour) => (
                   <option key={hour} value={hour}>

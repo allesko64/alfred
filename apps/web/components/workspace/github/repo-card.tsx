@@ -54,7 +54,7 @@ export function RepoCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+        <div className="flex flex-col gap-1 text-sm text-muted-foreground">
           {repo.defaultBranch && (
             <span className="flex items-center gap-1.5">
               <GitBranchIcon className="size-3.5" />

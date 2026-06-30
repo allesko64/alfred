@@ -26,7 +26,7 @@ export function PublicChangelogClient() {
     return (
       <div className="flex min-h-svh flex-col items-center justify-center gap-1 p-6 text-center">
         <span className="text-sm font-medium text-foreground">Changelog not found</span>
-        <span className="text-xs text-muted-foreground">This workspace doesn&apos;t have a public changelog.</span>
+        <span className="text-sm text-muted-foreground">This workspace doesn&apos;t have a public changelog.</span>
       </div>
     )
   }
@@ -60,8 +60,8 @@ export function PublicChangelogClient() {
                   {entry.type}
                 </Badge>
               </div>
-              <p className="text-sm text-foreground">{entry.entry}</p>
-              <span className="text-xs text-muted-foreground">{entry.featureTitle}</span>
+              <p className="text-lg text-foreground">{entry.entry}</p>
+              <span className="text-sm text-muted-foreground">{entry.featureTitle}</span>
               <span className="text-[10px] text-muted-foreground">
                 {new Date(entry.createdAt).toLocaleDateString(undefined, { dateStyle: "medium" })}
               </span>

@@ -1,21 +1,22 @@
 "use client"
 
-import { useMemo } from "react"
-import { useParams } from "next/navigation"
+import { useEffect, useRef, useState } from "react"
+import { useParams, useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
-import { WarningCircleIcon } from "@phosphor-icons/react"
+import { AnimatePresence, motion } from "framer-motion"
+import { BrainIcon, CheckCircleIcon, WarningCircleIcon } from "@phosphor-icons/react"
 
 import { useTRPC } from "@/lib/trpc/client"
 import { formatRelativeTime } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Progress } from "@/components/ui/progress"
+import { LoaderFive } from "@/components/ui/loader"
 import { AlfredAvatar, MessageBubble } from "@/components/workspace/conversation"
 import type { ConversationMessage } from "@/components/workspace/conversation"
-import { NextStepLink } from "@/components/workspace/feature-detail/next-step-link"
-import { useSetFeatureHeaderAction } from "@/components/workspace/feature-detail/feature-header-actions"
 
 export function OverviewClient() {
   const { workspaceId, featureId } = useParams<{ workspaceId: string; featureId: string }>()
+  const router = useRouter()
   const trpc = useTRPC()
 
   const { data: feature } = useQuery(trpc.feature.getById.queryOptions({ workspaceId, featureId }))
@@ -25,12 +26,6 @@ export function OverviewClient() {
 
   const isWritingPRD = feature?.status === "PRD_GENERATION"
   const isRejected = feature?.status === "REJECTED"
-  const isPRDReady =
-    !!feature &&
-    feature.status !== "DRAFT" &&
-    feature.status !== "CLARIFYING" &&
-    feature.status !== "PRD_GENERATION" &&
-    feature.status !== "REJECTED"
 
   const { data: progress } = useQuery(
     trpc.feature.getWorkflowProgress.queryOptions(
@@ -39,18 +34,25 @@ export function OverviewClient() {
     ),
   )
 
-  useSetFeatureHeaderAction(
-    useMemo(() => {
-      if (!isPRDReady) return null
-      return (
-        <NextStepLink
-          href={`/workspace/${workspaceId}/features/${featureId}/prd`}
-          label={feature?.approvedAt ? "View your PRD" : "Your PRD is ready"}
-        />
-      )
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isPRDReady, feature?.approvedAt, workspaceId, featureId]),
-  )
+  // Once generation finishes, show a brief success state before handing off
+  // to the PRD page — avoids a manual "your PRD is ready" button entirely.
+  const wasWritingRef = useRef(false)
+  const [redirecting, setRedirecting] = useState(false)
+
+  useEffect(() => {
+    if (isWritingPRD) {
+      wasWritingRef.current = true
+      return
+    }
+    if (wasWritingRef.current && feature && !isRejected) {
+      wasWritingRef.current = false
+      setRedirecting(true)
+      const timeout = setTimeout(() => {
+        router.push(`/workspace/${workspaceId}/features/${featureId}/prd`)
+      }, 1400)
+      return () => clearTimeout(timeout)
+    }
+  }, [isWritingPRD, feature, isRejected, router, workspaceId, featureId])
 
   return (
     // items-center centers the conversation column within this content area,
@@ -87,24 +89,45 @@ export function OverviewClient() {
         )}
       </div>
 
-      {isWritingPRD && (
-        <div className="flex w-full max-w-[700px] items-center gap-4 rounded-lg bg-muted px-4 py-4">
-          <AlfredAvatar pulse />
-          <div className="flex flex-1 flex-col gap-2">
-            <span className="text-sm text-foreground">
-              {progress?.progressMessage ?? "Alfred is writing your PRD..."}
-            </span>
-            <Progress value={progress?.progressPercent ?? 10} />
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {(isWritingPRD || redirecting) && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm"
+          >
+            <div className="flex w-72 flex-col items-center gap-4 rounded-xl border border-border bg-card px-8 py-8 text-center shadow-2xl">
+              {redirecting ? (
+                <>
+                  <div className="flex size-12 items-center justify-center rounded-full bg-success text-success-foreground">
+                    <CheckCircleIcon className="size-6" />
+                  </div>
+                  <span className="text-sm font-medium text-foreground">
+                    Your PRD is ready — taking you there now...
+                  </span>
+                </>
+              ) : (
+                <>
+                  <AlfredAvatar pulse icon={BrainIcon} />
+                  <div className="flex w-full flex-col gap-2">
+                    <LoaderFive text={progress?.progressMessage ?? "Alfred is writing your PRD..."} />
+                    <Progress value={progress?.progressPercent ?? 10} />
+                  </div>
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {feature && isRejected && (
         <div className="flex w-full max-w-[700px] items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-4">
           <WarningCircleIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
           <div className="flex flex-col gap-1">
             <span className="text-sm font-medium text-destructive">PRD generation was blocked</span>
-            <span className="text-xs text-muted-foreground">{feature.rejectionReason}</span>
+            <span className="text-sm text-muted-foreground">{feature.rejectionReason}</span>
           </div>
         </div>
       )}

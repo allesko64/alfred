@@ -156,7 +156,7 @@ export function NewFeatureChatClient() {
         >
           <ArrowLeftIcon className="size-4" />
         </button>
-        <span className="text-base font-medium text-muted-foreground">New Feature</span>
+        <span className="text-sm font-medium text-muted-foreground">New Feature</span>
       </div>
 
       <div className="flex flex-1 flex-col items-center overflow-y-auto px-6">

@@ -41,14 +41,14 @@ export function TaskColumn({
       )}
     >
       <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-semibold text-foreground">{COLUMN_LABEL[status]}</span>
+        <span className="text-sm font-semibold text-foreground">{COLUMN_LABEL[status]}</span>
         <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
           {tasks.length}
         </span>
       </div>
       <div className="flex flex-1 flex-col gap-2">
         {tasks.length === 0 ? (
-          <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border py-8 text-xs text-muted-foreground">
+          <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border py-8 text-sm text-muted-foreground">
             No tasks here yet
           </div>
         ) : (

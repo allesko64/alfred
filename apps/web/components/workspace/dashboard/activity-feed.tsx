@@ -48,15 +48,12 @@ export function ActivityFeed({ workspaceId }: { workspaceId: string }) {
           <Skeleton className="h-32 w-full" />
         ) : activity?.length ? (
           <AnimatePresence initial={false}>
-            {activity.map((item) => {
+            {activity.slice(0, 3).map((item) => {
               const content = (
                 <>
                   <BellSimpleIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                   <div className="flex flex-col">
-                    <span className="text-xs text-foreground">{item.title ?? item.type}</span>
-                    {item.message && (
-                      <span className="text-xs text-muted-foreground">{item.message}</span>
-                    )}
+                    <span className="text-sm text-foreground transition-colors group-hover:text-primary">{item.title ?? item.type}</span>
                     <Timestamp date={item.createdAt} className="text-[10px] text-muted-foreground" />
                   </div>
                 </>
@@ -77,8 +74,8 @@ export function ActivityFeed({ workspaceId }: { workspaceId: string }) {
                 >
                   {item.featureId ? (
                     <Link
-                      href={`/workspace/${workspaceId}/features/${item.featureId}`}
-                      className="flex items-start gap-2.5 pl-2 hover:text-foreground"
+                      href={`/workspace/${workspaceId}/features/${item.featureId}/review`}
+                      className="group flex items-start gap-2.5 pl-2 hover:text-foreground"
                     >
                       {content}
                     </Link>
@@ -92,7 +89,7 @@ export function ActivityFeed({ workspaceId }: { workspaceId: string }) {
         ) : (
           <div className="flex flex-col items-center gap-2 py-6 text-center">
             <BellSimpleIcon className="size-5 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">
+            <span className="text-sm text-muted-foreground">
               Nothing yet — activity will show up here as your team ships.
             </span>
           </div>

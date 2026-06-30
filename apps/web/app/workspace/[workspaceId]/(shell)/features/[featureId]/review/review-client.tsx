@@ -83,7 +83,7 @@ function IssueCard({ issue }: { issue: ReviewIssue }) {
           </Badge>
         )}
       </div>
-      {issue.description && <span className="text-xs text-muted-foreground">{issue.description}</span>}
+      {issue.description && <span className="text-sm text-muted-foreground">{issue.description}</span>}
       <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-muted-foreground">
         {issue.filePath && (
           <span>
@@ -169,25 +169,25 @@ function ReviewResults({
         </div>
       )}
 
-      {review.summary && <p className="text-sm text-foreground">{review.summary}</p>}
+      {review.summary && <p className="text-lg text-foreground">{review.summary}</p>}
 
       <div className="flex flex-col gap-2">
-        <span className="text-xs font-medium text-destructive">
+        <span className="text-sm font-medium text-destructive">
           🔴 Blocking Issues ({blockingIssues.length})
         </span>
         {blockingIssues.length === 0 ? (
-          <span className="text-xs text-muted-foreground">No blocking issues found ✅</span>
+          <span className="text-sm text-muted-foreground">No blocking issues found ✅</span>
         ) : (
           blockingIssues.map((issue) => <IssueCard key={issue.id} issue={issue} />)
         )}
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className="text-xs font-medium text-warning">
+        <span className="text-sm font-medium text-warning">
           🟡 Non-Blocking Issues ({nonBlockingIssues.length})
         </span>
         {nonBlockingIssues.length === 0 ? (
-          <span className="text-xs text-muted-foreground">No non-blocking issues found ✅</span>
+          <span className="text-sm text-muted-foreground">No non-blocking issues found ✅</span>
         ) : (
           nonBlockingIssues.map((issue) => <IssueCard key={issue.id} issue={issue} />)
         )}
@@ -195,9 +195,9 @@ function ReviewResults({
 
       {criteriaCoverage.length > 0 && (
         <div className="flex flex-col gap-1.5 rounded-lg border border-border px-4 py-3">
-          <span className="text-xs font-medium text-foreground">Acceptance criteria coverage</span>
+          <span className="text-sm font-medium text-foreground">Acceptance criteria coverage</span>
           {criteriaCoverage.map((ac) => (
-            <div key={ac.label} className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div key={ac.label} className="flex items-center gap-2 text-sm text-muted-foreground">
               <span>
                 {ac.status === "IMPLEMENTED" ? "✅" : ac.status === "PARTIAL" ? "⚠️" : "❌"} {ac.label}
               </span>
@@ -283,7 +283,7 @@ export function ReviewClient() {
     return (
       <div className="flex max-w-[700px] flex-col items-center gap-1 py-16 text-center">
         <span className="text-sm font-medium text-muted-foreground">Review</span>
-        <span className="text-xs text-muted-foreground/70">
+        <span className="text-sm text-muted-foreground/70">
           Complete your tasks first before linking a PR for review
         </span>
       </div>
@@ -309,7 +309,7 @@ export function ReviewClient() {
               </SelectTrigger>
               <SelectContent>
                 {unlinkedPRs.length === 0 ? (
-                  <div className="px-2 py-1.5 text-xs text-muted-foreground">No unlinked open PRs</div>
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">No unlinked open PRs</div>
                 ) : (
                   unlinkedPRs.map((unlinked) => (
                     <SelectItem key={unlinked.id} value={unlinked.id}>
@@ -370,7 +370,7 @@ export function ReviewClient() {
           </CardTitle>
         </CardHeader>
         <CardContent className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">{pr.repositoryName}</span>
+          <span className="text-sm text-muted-foreground">{pr.repositoryName}</span>
           <StatusBadge status={pr.status} />
         </CardContent>
       </Card>
@@ -378,7 +378,7 @@ export function ReviewClient() {
       {/* Decision 1 — debounce banner takes priority over the generic running state. */}
       {isPending && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-4 py-3">
-          <span className="text-xs text-muted-foreground">{workflowStatus?.progressMessage}</span>
+          <span className="text-sm text-muted-foreground">{workflowStatus?.progressMessage}</span>
           <Button
             size="sm"
             variant="outline"
@@ -408,7 +408,7 @@ export function ReviewClient() {
           <WarningCircleIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
           <div className="flex flex-col gap-1">
             <span className="text-sm font-medium text-destructive">Review couldn&apos;t run</span>
-            <span className="text-xs text-muted-foreground">{workflowStatus.errorMessage}</span>
+            <span className="text-sm text-muted-foreground">{workflowStatus.errorMessage}</span>
           </div>
         </div>
       )}
@@ -419,7 +419,7 @@ export function ReviewClient() {
 
           {currentReviews.length > 1 && (
             <details className="rounded-lg border border-border px-4 py-3">
-              <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+              <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
                 Previous reviews ({currentReviews.length - 1})
               </summary>
               <div className="mt-3 flex flex-col gap-4">

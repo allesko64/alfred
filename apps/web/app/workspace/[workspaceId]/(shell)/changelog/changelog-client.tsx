@@ -41,7 +41,7 @@ export function ChangelogClient() {
             href={`/changelog/${workspace.slug}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 self-start text-xs text-muted-foreground hover:text-foreground hover:underline"
+            className="flex items-center gap-1.5 self-start text-sm text-muted-foreground hover:text-foreground hover:underline"
           >
             <ScrollIcon className="size-3.5" />
             View public changelog
@@ -54,7 +54,7 @@ export function ChangelogClient() {
           <div className="flex max-w-[700px] flex-col items-center gap-1 py-16 text-center">
             <ScrollIcon className="size-5 text-muted-foreground" />
             <span className="text-sm font-medium text-muted-foreground">No entries yet</span>
-            <span className="text-xs text-muted-foreground/70">
+            <span className="text-sm text-muted-foreground/70">
               A changelog entry is written automatically every time a feature ships
             </span>
           </div>
@@ -76,10 +76,10 @@ export function ChangelogClient() {
                         </Badge>
                         <Timestamp date={entry.createdAt} className="text-[10px] text-muted-foreground" />
                       </div>
-                      <p className="text-sm text-foreground">{entry.entry}</p>
+                      <p className="text-lg text-foreground">{entry.entry}</p>
                       <Link
                         href={`/workspace/${workspaceId}/features/${entry.featureId}`}
-                        className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                        className="text-sm text-muted-foreground hover:text-foreground hover:underline"
                       >
                         {entry.featureTitle}
                       </Link>

@@ -106,14 +106,14 @@ export function Hero() {
         </FadeIn>
 
         <FadeIn delay={0.4} className="mt-6">
-          <p className="text-lg md:text-xl text-foreground/60 font-normal max-w-xl mx-auto text-center leading-relaxed">
+          <p className="text-xl md:text-2xl text-foreground/60 font-normal max-w-xl mx-auto text-center leading-relaxed">
             Your AI co-pilot for the entire feature lifecycle.
           </p>
         </FadeIn>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center mt-10">
           <FadeIn delay={0.5}>
-            <Button variant="default" size="lg" className="rounded-md group font-bold text-base"
+            <Button variant="default" size="lg" className="rounded-md group font-bold text-lg"
             
               render={<Link href="/signup" />} nativeButton={false}>
               Start building 
@@ -126,7 +126,7 @@ export function Hero() {
             <Button
               variant="outline"
               size="lg"
-              className="rounded-md font-bold text-base border-foreground/20 text-foreground/80 hover:text-foreground hover:border-foreground/50 bg-transparent hover:bg-transparent"
+              className="rounded-md font-bold text-lg border-foreground/20 text-foreground/80 hover:text-foreground hover:border-foreground/50 bg-transparent hover:bg-transparent"
             >
               See how it works
             </Button>
@@ -158,7 +158,7 @@ export function Hero() {
               <span className="w-2.5 h-2.5 rounded-full bg-[#FF5F57]" />
               <span className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]" />
               <span className="w-2.5 h-2.5 rounded-full bg-[#28C840]" />
-              <span className="ml-auto mr-auto bg-foreground/5 rounded-full px-3 py-0.5 text-xs text-foreground/30">
+              <span className="ml-auto mr-auto bg-foreground/5 rounded-full px-3 py-0.5 text-sm text-foreground/30">
                 app.alfred.ai
               </span>
             </div>
@@ -172,7 +172,7 @@ export function Hero() {
                     "radial-gradient(ellipse 60% 60% at 50% 50%, hsl(var(--primary) / 0.05), transparent)",
                 }}
               />
-              <p className="relative text-muted-foreground text-sm italic">
+              <p className="relative text-muted-foreground text-lg italic">
                 Demo video coming soon
               </p>
             </div>

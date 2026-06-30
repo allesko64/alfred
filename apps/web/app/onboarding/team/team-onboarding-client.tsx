@@ -128,7 +128,7 @@ export function TeamOnboardingClient() {
     <div className="relative flex min-h-screen flex-col items-center justify-center bg-background px-6 py-16">
       <div className="mb-8 flex w-full max-w-md flex-col gap-2 text-center">
         <h1 className="text-3xl font-bold text-foreground">Who&apos;s building with you?</h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-lg text-muted-foreground">
           Invite your team to collaborate. You can always do this later.
         </p>
       </div>
@@ -173,7 +173,7 @@ export function TeamOnboardingClient() {
                 <span className="text-sm font-medium text-foreground">
                   {lookup.data.name ?? lookup.data.username}
                 </span>
-                <span className="text-xs text-muted-foreground">@{lookup.data.username}</span>
+                <span className="text-sm text-muted-foreground">@{lookup.data.username}</span>
               </div>
               <Button
                 type="button"
@@ -191,7 +191,7 @@ export function TeamOnboardingClient() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="px-1 text-xs text-muted-foreground"
+              className="px-1 text-sm text-muted-foreground"
             >
               GitHub user not found
             </motion.p>
@@ -213,7 +213,7 @@ export function TeamOnboardingClient() {
                   <span className="text-sm font-medium text-foreground">
                     {invite.name ?? invite.username}
                   </span>
-                  <span className="text-xs text-muted-foreground">@{invite.username}</span>
+                  <span className="text-sm text-muted-foreground">@{invite.username}</span>
                 </div>
                 <Badge variant="secondary">
                   {ROLES.find((r) => r.value === invite.role)?.label}

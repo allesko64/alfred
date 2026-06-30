@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
-import { billingSubscriptions, db, workspaces } from "@alfred/db";
+import { billingSubscriptions, db, PLAN_CREDITS, workspaces } from "@alfred/db";
 import { eq } from "drizzle-orm";
 
 function verifySignature(payload: string, signature: string | null, secret: string): boolean {
@@ -49,9 +49,15 @@ export async function POST(req: Request) {
           .returning();
 
         if (billing) {
+          // Top up credits to the new plan's allowance immediately, rather than waiting for the monthly cron.
           await db
             .update(workspaces)
-            .set({ plan: billing.plan, billingStatus: "active" })
+            .set({
+              plan: billing.plan,
+              billingStatus: "active",
+              creditsRemaining: PLAN_CREDITS[billing.plan],
+              creditsResetAt: new Date(),
+            })
             .where(eq(workspaces.id, billing.workspaceId));
         }
       }

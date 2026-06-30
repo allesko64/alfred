@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { approvePRDSchema, createPRDSchema } from "@alfred/validators";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { features, prds } from "@alfred/db";
+import { checkAndDeductCredits, features, prds } from "@alfred/db";
 import { inngest } from "@alfred/inngest";
 import { createTRPCRouter, workspaceProcedure } from "../trpc";
 
@@ -46,8 +46,6 @@ export const prdRouter = createTRPCRouter({
           nonGoals: input.nonGoals,
           userStories: input.userStories,
           acceptanceCriteria: input.acceptanceCriteria,
-          edgeCases: input.edgeCases,
-          successMetrics: input.successMetrics,
           assumptions: input.assumptions,
           scopeWarning: input.scopeWarning,
           rawContent: input.rawContent,
@@ -74,6 +72,14 @@ export const prdRouter = createTRPCRouter({
 
       if (!feature) {
         throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      const credits = await checkAndDeductCredits(ctx.workspaceId, "task_generation");
+      if (!credits.allowed) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You're out of AI credits. Upgrade or wait for your next monthly reset.",
+        });
       }
 
       await ctx.db

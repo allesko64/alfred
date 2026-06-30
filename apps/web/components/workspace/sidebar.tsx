@@ -63,14 +63,14 @@ function NavLink({
       href={href}
       style={color ? ({ "--nav-color": color } as React.CSSProperties) : undefined}
       className={cn(
-        "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
+        "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-base font-semibold transition-colors",
         isActive
           ? color
-            ? "font-medium text-[var(--nav-color)]"
-            : "font-medium text-foreground"
+            ? "text-[var(--nav-color)]"
+            : "text-foreground"
           : color
-            ? "font-normal text-muted-foreground hover:bg-muted hover:text-[var(--nav-color)]"
-            : "font-normal text-muted-foreground hover:bg-muted hover:text-foreground",
+            ? "text-muted-foreground hover:bg-muted hover:text-[var(--nav-color)]"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >
       {isActive && (
@@ -117,11 +117,11 @@ export function Sidebar({ workspaceId }: { workspaceId: string }) {
           render={
             <button
               type="button"
-              className="mx-3 flex items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-left text-xs hover:bg-muted/70"
+              className="mx-3 flex items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-left text-base font-semibold hover:bg-muted/70"
             />
           }
         >
-          <span className="truncate font-medium">
+          <span className="truncate">
             {currentWorkspace?.name ?? "Select workspace"}
           </span>
           <CaretDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
@@ -197,10 +197,10 @@ export function Sidebar({ workspaceId }: { workspaceId: string }) {
             </AvatarFallback>
           </Avatar>
           <div className="flex flex-1 flex-col overflow-hidden leading-tight">
-            <span className="truncate text-xs font-medium text-foreground">
+            <span className="truncate text-base font-semibold text-foreground">
               {session?.user.name ?? "Account"}
             </span>
-            <span className="truncate text-xs text-muted-foreground">
+            <span className="truncate text-sm text-muted-foreground">
               {session?.user.email}
             </span>
           </div>

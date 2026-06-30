@@ -5,6 +5,7 @@ import {
   clarificationWorkflow,
   dailyDigestWorkflow,
   inngest,
+  monthlyCreditResetWorkflow,
   prdGenerationWorkflow,
   prIngestionWorkflow,
   reReviewWorkflow,
@@ -26,5 +27,6 @@ export const { GET, POST, PUT } = serve({
     changelogGenerationWorkflow,
     dailyDigestWorkflow,
     repoVectorizationWorkflow,
+    monthlyCreditResetWorkflow,
   ],
 });

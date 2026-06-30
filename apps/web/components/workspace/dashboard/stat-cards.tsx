@@ -55,7 +55,7 @@ export function StatCards({ workspaceId }: { workspaceId: string }) {
         return (
           <Card key={card.key}>
             <CardHeader className="flex flex-row items-center justify-between gap-2">
-              <CardTitle className="text-xs">{card.label}</CardTitle>
+              <CardTitle className="text-sm">{card.label}</CardTitle>
               <Icon
                 className={cn("size-4", !color && "text-muted-foreground")}
                 style={color ? { color } : undefined}
@@ -70,7 +70,7 @@ export function StatCards({ workspaceId }: { workspaceId: string }) {
               {card.key === "aiCreditsRemaining" && stats && (
                 <span
                   className={cn(
-                    "ml-1.5 text-xs text-muted-foreground",
+                    "ml-1.5 text-sm text-muted-foreground",
                     stats.aiCreditsRemaining === 0 && "text-destructive",
                   )}
                 >

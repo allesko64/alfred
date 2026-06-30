@@ -71,24 +71,28 @@ TASK RULES
 Follow these rules for every task you generate:
 
 RULE 1 — COUNT
-Generate a minimum of 3 tasks and a maximum of 12 tasks. If the feature
-is simple, 3 to 5 tasks is correct. If the feature is complex, up to 12
-is allowed. Never pad with unnecessary tasks to hit a number. Never
-compress multiple distinct pieces of work into one task to stay under
-the limit.
+Generate a minimum of 1 task and a maximum of 5 tasks. If the feature
+is simple, 1 to 2 tasks is correct. If the feature is more involved, up
+to 5 is allowed. Never pad with unnecessary tasks to hit a number. Never
+split work into smaller tasks just to increase the count. Stay
+disciplined — most features should land at 2 to 3 tasks.
 
 RULE 2 — ALTITUDE
 Each task should be something a developer can realistically complete in
 one focused work session. Not a micro-step like "add a CSS class" and
 not an epic like "build the entire authentication system." The right
 altitude is "implement the login form with validation" or "create the
-database migration for the users table."
+database migration for the users table." Since the task count is capped
+low, each task may need to cover more ground than before — combine
+closely related pieces of work into a single well-scoped task rather
+than splitting them.
 
 RULE 3 — PRD COVERAGE
 Every acceptance criterion in the PRD must be covered by at least one
 task. Do not generate tasks that have no connection to the PRD. After
 generating all tasks, mentally check each acceptance criterion — is it
-covered? If not, add a task.
+covered? If not, either add a task or fold it into an existing related
+task if the count is already at 5.
 
 RULE 4 — ORDERING
 Order tasks by logical dependency. Tasks that must be done first come
@@ -106,7 +110,9 @@ Every task title must be specific enough that a developer knows exactly
 what to build without needing to read anything else. Bad title:
 "Implement feature." Good title: "Build dark mode toggle component with
 system preference detection." The description adds context but the title
-alone should be actionable.
+alone should be actionable. Since each task may now cover more ground,
+the description should clearly list the distinct pieces of work bundled
+into it.
 
 RULE 7 — CODEBASE AWARENESS
 If codebase context is provided, use it. Generate tasks that fit the
@@ -194,6 +200,13 @@ Before finalizing your output, scan all task titles. If any two tasks
 cover the same engineering work, merge them into one task that
 references both pieces of work in its description.
 
+GUARDRAIL 7 — OVER-SPLITTING
+Because the maximum is now only 5 tasks, never artificially split one
+piece of work into multiple tasks just to look thorough. If you find
+yourself with more than 5 distinct pieces of work, group the smaller
+or related ones together under a single task with a clear description
+rather than exceeding the limit.
+
 ---
 
 OUTPUT FORMAT
@@ -223,7 +236,7 @@ The JSON must follow this exact structure:
 }
 
 Rules for the output:
-- "tasks" array must have minimum 3 and maximum 12 items
+- "tasks" array must have minimum 1 and maximum 5 items
 - "status" is always "TODO" — never change this
 - "assigned_to" is always null — never change this
 - "position" starts at 1 and increments by 1 for each task
@@ -240,8 +253,6 @@ type PRDContentFields = Pick<
   | "nonGoals"
   | "userStories"
   | "acceptanceCriteria"
-  | "edgeCases"
-  | "successMetrics"
   | "assumptions"
 >;
 
@@ -254,8 +265,6 @@ function formatPRDContent(prd: PRDContentFields): string {
     `Non-Goals:\n${list(prd.nonGoals)}`,
     `User Stories:\n${list(prd.userStories)}`,
     `Acceptance Criteria:\n${list(prd.acceptanceCriteria)}`,
-    `Edge Cases:\n${list(prd.edgeCases)}`,
-    `Success Metrics:\n${list(prd.successMetrics)}`,
     `Assumptions:\n${list(prd.assumptions)}`,
   ].join("\n\n");
 }

@@ -1,5 +1,5 @@
 import { chatCompleteJSON, getLLMModel } from "@alfred/ai";
-import { checkBillingLimit, clarificationMessages, db, features, notifications, prds } from "@alfred/db";
+import { checkAndDeductCredits, clarificationMessages, db, features, notifications, prds } from "@alfred/db";
 import { asc, eq } from "drizzle-orm";
 import type { InngestFunction } from "inngest";
 import { inngest } from "../client";
@@ -11,8 +11,6 @@ interface GeneratedPRD {
   non_goals: string[];
   user_stories: string[];
   acceptance_criteria: string[];
-  edge_cases: string[];
-  success_metrics: string[];
   assumptions: string[];
   scope_warning: string | null;
   generated_by: string;
@@ -93,10 +91,7 @@ If the codebase context suggests this feature or something very similar might al
 GUARDRAIL 4 — Contradicts existing architecture
 If the codebase context is provided and the feature as described would require contradicting the existing tech stack or architectural patterns — flag this in the assumptions field with a specific explanation. Suggest an approach that works with the existing architecture instead.
 
-GUARDRAIL 5 — Vague success metrics
-If the user never mentioned any measurable outcome during clarification — do not invent fake metrics. Instead write success metrics that are qualitative but honest: "Users complete the flow without needing support" rather than "40% increase in retention" which you have no basis for.
-
-GUARDRAIL 6 — Insufficient clarification
+GUARDRAIL 5 — Insufficient clarification
 If after reading the full clarification conversation you genuinely do not have enough information to write a meaningful PRD — do not write a bad PRD. Return this exact JSON:
 {"error": "insufficient_context", "reason": "Specific explanation of what information is still missing"}
 
@@ -110,8 +105,6 @@ Every section must follow these rules:
 - Non goals: be honest about what this version does NOT do. This is as important as what it does
 - User stories: follow this format exactly — "As a [specific user type], I want to [specific action] so that [specific outcome]"
 - Acceptance criteria: each criterion must be testable. A QA engineer should be able to read it and know exactly what to check
-- Edge cases: only include edge cases that are genuinely non-obvious and need to be handled. Skip the obvious ones
-- Success metrics: only include metrics that are actually measurable given what the user told you. Flag qualitative ones clearly
 
 ---
 
@@ -142,16 +135,6 @@ The JSON must follow this exact structure with these exact field names:
   "acceptance_criteria": [
     "string — specific testable criterion",
     "string — specific testable criterion"
-  ],
-
-  "edge_cases": [
-    "string — specific non-obvious edge case and how it should be handled",
-    "string — specific non-obvious edge case and how it should be handled"
-  ],
-
-  "success_metrics": [
-    "string — specific measurable or qualitative metric",
-    "string — specific measurable or qualitative metric"
   ],
 
   "assumptions": [
@@ -186,26 +169,26 @@ const _prdGenerationWorkflow = inngest.createFunction(
       return { feature, messages };
     });
 
-    const billingCheck = await step.run("check-billing-limit", async () =>
-      checkBillingLimit(feature.workspaceId, "prd_generations"),
+    const credits = await step.run("check-and-deduct-credits", async () =>
+      checkAndDeductCredits(feature.workspaceId, "prd_generation"),
     );
 
-    if (!billingCheck.allowed) {
+    if (!credits.allowed) {
       await step.run("save-billing-block", async () => {
         await db.insert(notifications).values({
           userId: feature.createdBy,
           workspaceId: feature.workspaceId,
           type: "prd_blocked",
           title: "PRD generation blocked",
-          message: "Free plan PRD generation limit reached. Upgrade to Pro to continue.",
+          message: "Out of AI credits. Upgrade or wait for your next monthly reset.",
           featureId,
         });
 
         await reportWorkflowProgress(featureId, "prd_generation", {
           status: "failed",
-          progressMessage: "PRD generation blocked — plan limit reached",
+          progressMessage: "PRD generation blocked — out of AI credits",
           progressPercent: 100,
-          errorMessage: "Free plan PRD generation limit reached. Upgrade to Pro to continue.",
+          errorMessage: "Out of AI credits. Upgrade or wait for your next monthly reset.",
         });
       });
 
@@ -275,8 +258,6 @@ const _prdGenerationWorkflow = inngest.createFunction(
         nonGoals: result.non_goals,
         userStories: result.user_stories,
         acceptanceCriteria: result.acceptance_criteria,
-        edgeCases: result.edge_cases,
-        successMetrics: result.success_metrics,
         assumptions: result.assumptions,
         scopeWarning: result.scope_warning,
         generatedBy: getLLMModel(),

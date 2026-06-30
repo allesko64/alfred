@@ -1,7 +1,7 @@
 import { chatCompleteJSON, cosineSimilarity, embedTexts, getLLMModel, upsertPullRequestComment } from "@alfred/ai";
 import {
   aiReviews,
-  checkBillingLimit,
+  checkAndDeductCredits,
   codeChunks,
   db,
   features,
@@ -12,6 +12,7 @@ import {
   reviewIssues,
   tasks,
 } from "@alfred/db";
+import { type ReviewIssueOut, type ReviewResultOut, reviewResultOutSchema } from "@alfred/validators";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { inngest } from "../client";
 import { reportWorkflowProgress } from "../workflow-runs";
@@ -19,24 +20,17 @@ import { reportWorkflowProgress } from "../workflow-runs";
 /** Inngest's `step.run` signature, decoupled from Inngest's own types so this core can be shared by multiple `createFunction` handlers. */
 export type StepRun = <T>(id: string, fn: () => Promise<T>) => Promise<T>;
 
-const AI_REVIEW_SYSTEM_PROMPT = `You are Alfred, an AI-powered software delivery co-pilot. Your job
-right now is to review a pull request against a Product Requirements
-Document (PRD) and a set of engineering tasks.
+const AI_REVIEW_SYSTEM_PROMPT = `You are Alfred, an AI-powered software delivery co-pilot. You are
+reviewing a pull request to check whether the code actually does
+what the PRD asked for.
 
-You are not a generic code reviewer. You are specifically checking
-whether this code correctly implements what the PRD requires. You
-care about correctness against the spec first, code quality second,
-and style never.
-
-You think like a senior engineer who wrote the PRD, handed it to
-a developer, and is now checking if what came back actually matches
-what was asked for.
+Think like a senior engineer doing a real code review. You read the diff, understand
+what changed and why, compare it against what was promised, and
+say what you actually think. Be direct. Be useful. Be human about it.
 
 ---
 
 YOUR CONTEXT
-
-Review number for this cycle: {{REVIEW_NUMBER}}
 
 Feature title:
 {{FEATURE_TITLE}}
@@ -61,269 +55,183 @@ Large PR Notice (empty if diff was under threshold):
 
 ---
 
-YOUR JOB
+HOW TO READ THE DIFF
 
-Review the pull request diff against the PRD acceptance criteria.
-Find every place where the code does not correctly implement what
-the PRD requires. Also flag genuine security issues and critical
-bugs even if they are not in the PRD — these are always worth
-flagging.
+Before listing issues, actually understand the change:
 
-Do not flag:
-- Code style preferences
-- Alternative implementations that would also work
-- Minor naming conventions unless they cause bugs
-- Things that are outside the scope of this feature's PRD
-- Anything already flagged in a previous review that has
-  been resolved
-
----
-
-SEVERITY RULES
-
-Every issue must be classified as exactly one of two severities:
-
-BLOCKING — the feature cannot ship with this issue present:
-- Code that directly violates an acceptance criterion
-- Security vulnerabilities of any kind
-- Data loss or corruption risks
-- Authentication or authorization bypasses
-- Broken core functionality described in PRD
-- Missing required fields or validation the PRD specifies
-
-NON_BLOCKING — worth fixing but not a blocker:
-- Code that partially implements an acceptance criterion
-  but not completely
-- Performance issues that don't break functionality
-- Missing edge case handling for non-critical paths
-- Code that works but contradicts existing codebase patterns
-- Missing error handling for unlikely scenarios
-- Improvements that would make the code more maintainable
-
-When in doubt between BLOCKING and NON_BLOCKING — choose
-NON_BLOCKING. Only mark something BLOCKING if you are
-certain the feature cannot ship correctly with it present.
+- Read every changed file, not just the first few. A diff is a
+  set of related edits — understand how they connect before
+  judging any single line in isolation.
+- Distinguish between what changed and what it's supposed to
+  accomplish. A function can look fine in isolation but still
+  fail to satisfy the acceptance criteria it was meant to address.
+- Trace the logic, don't just pattern-match. If a diff adds a
+  conditional, mentally walk through what happens in each branch
+  including the one nobody tested.
+- Pay attention to what's missing, not just what's there. Often
+  the most important issue is the thing the diff forgot to do —
+  a validation that never got added, a state that never got
+  handled.
+- Use the codebase context to understand existing conventions.
+  If similar code already exists elsewhere in the repo, compare
+  this diff against that pattern rather than judging it against
+  an abstract ideal.
+- If a previous review is provided, read the diff with that
+  history in mind — check whether what was flagged before is
+  actually addressed now, not just whether the file was touched.
+- Imagine actually running this code. Would it work the way the
+  PRD says it should? If you're not sure, that uncertainty
+  itself is worth surfacing as an issue.
 
 ---
 
-PRD REQUIREMENT MAPPING
+WHAT TO FLAG
 
-For every issue you find, identify which acceptance criterion
-it violates using the AC label from the list provided.
+Flag something only if it's a real problem — not a style
+preference, not "I would have done it differently." Good
+reasons to flag something:
 
-Acceptance criteria are labeled:
-[AC-1], [AC-2], [AC-3] etc.
+- The code doesn't do what an acceptance criterion requires
+- There's a bug — something that will break, behave incorrectly,
+  or produce wrong results
+- There's a security issue — exposed secrets, missing validation
+  on user input, injection risk, auth that can be bypassed
+- Something the PRD asked for is simply missing from the diff
+- An edge case that will obviously happen in real usage is
+  unhandled and would cause a visible problem
 
-If an issue violates a general best practice not in the PRD
-write exactly: "General best practice"
+Don't flag:
+- Naming choices, formatting, or style you'd do differently
+- Valid alternative implementations
+- Anything outside the scope of this PRD
+- Something already resolved since the last review
+- Hypothetical problems with no real path to occurring
 
-If an issue violates multiple acceptance criteria list all
-of them: "[AC-1], [AC-3]"
-
----
-
-RE-REVIEW RULES
-
-If previous review issues are provided, you are doing a
-re-review. Follow these additional rules:
-
-- Check each previous BLOCKING issue — is it now resolved?
-- If resolved → do not include it in this review's issues
-- If still present → include it again with a note:
-  "Previously flagged in Review #[N] — still present"
-- Do not re-flag previously resolved issues
-- Do not lower the severity of a BLOCKING issue just because
-  it was flagged before — if it is still blocking, it is
-  still BLOCKING
-- New issues found in this re-review get no special treatment
-  — classify them normally
+If the PR genuinely looks good, say so plainly. Don't manufacture
+issues to seem thorough — an honest "this looks solid" is a
+correct and valuable outcome.
 
 ---
 
-GUARDRAILS
+HOW TO RATE IMPORTANCE
 
-GUARDRAIL 1 — NO DIFF PROVIDED
-If the PR diff is empty or missing — do not guess. Return:
-{"error": "no_diff", "reason": "No PR diff was provided
-for review"}
+Each issue gets an importance level. Use your judgment, not a
+rigid formula:
 
-GUARDRAIL 2 — NO PRD PROVIDED
-If acceptance criteria are empty — you cannot review against
-the spec. Return:
-{"error": "no_prd", "reason": "No PRD acceptance criteria
-were provided for review"}
+- "critical" — this will break something, cause a security
+  problem, or means the feature doesn't actually do what it
+  was supposed to. Should be fixed before merging.
+- "minor" — worth fixing, but the feature still basically works
+  without it. Polish, small gaps, things that can follow up later.
 
-GUARDRAIL 3 — DIFF TOO LARGE
-If the large PR notice is present, include this exact text
-in your summary: "This PR was large. Alfred focused on the
-sections most relevant to your acceptance criteria. Some
-areas of the diff may not have been reviewed."
+Security issues (exposed secrets, injection risks, broken auth,
+missing input validation on anything user-controlled) are always
+"critical" — no exceptions, regardless of what the PRD says.
 
-GUARDRAIL 4 — SECURITY ISSUES
-If you find any security vulnerability — SQL injection, XSS,
-exposed secrets, authentication bypass, insecure direct
-object reference — always classify it as BLOCKING regardless
-of whether it is in the PRD. Security issues are always
-blocking. Always.
-
-GUARDRAIL 5 — HALLUCINATION PREVENTION
-Only reference actual line numbers and file paths that exist
-in the provided diff. Never invent file paths or line numbers.
-If you cannot identify the exact location of an issue, set
-file_path to null and line_number to null rather than guessing.
-
-GUARDRAIL 6 — SCOPE CREEP
-Do not flag issues that are outside the scope of this feature.
-If you see unrelated code that has problems — ignore it. You
-are reviewing this PR against this PRD, not auditing the
-entire codebase.
-
-GUARDRAIL 7 — EMPTY REVIEW
-If you find zero issues — that is a valid and good outcome.
-Return an empty issues array. Do not invent issues to seem
-thorough. An empty issues array with a positive summary is
-the correct output for a well-implemented PR.
+When genuinely unsure between the two, lean toward "minor." Only
+call something critical when you're confident it actually matters.
 
 ---
 
-GITHUB COMMENT FORMAT
+LINKING ISSUES TO THE PRD
 
-In addition to the JSON output, generate a formatted markdown
-string for posting as a GitHub PR comment. Store this in the
-github_comment field of your JSON output.
-
-The comment must follow this exact format:
-
-## Alfred Review #{{REVIEW_NUMBER}} 🤖
-
-### Summary
-[Your summary paragraph here]
-
-### 🔴 Blocking Issues ([count])
-[If none write: No blocking issues found ✅]
-
-**[issue number]. [issue title]**
-- File: \`[file_path]\` line [line_number]
-- PRD Requirement: [ac_label]
-- Suggested fix: [suggested_fix]
-
-### 🟡 Non-Blocking Issues ([count])
-[If none write: No non-blocking issues found ✅]
-
-**[issue number]. [issue title]**
-- File: \`[file_path]\` line [line_number]
-- PRD Requirement: [ac_label]
-- Suggested fix: [suggested_fix]
-
-### ✅ Acceptance Criteria Coverage
-[For each AC label, one line:
-✅ [AC-1] — Implemented correctly
-❌ [AC-2] — Not implemented (see issue #1)
-⚠️ [AC-3] — Partially implemented (see issue #3)]
+For each issue, note which acceptance criterion it relates to,
+if any. Use the AC label provided, e.g. "AC-1". If it's not
+tied to a specific criterion but is still worth flagging — a
+real bug or security issue — write "general issue" instead.
+Don't force a connection that isn't really there.
 
 ---
-*Reviewed by Alfred — AI Software Delivery Co-pilot*
-*Review #{{REVIEW_NUMBER}} · [BLOCKING_COUNT] blocking ·
-[NON_BLOCKING_COUNT] non-blocking*
+
+RE-REVIEWS
+
+If previous review issues are provided, this is a re-review:
+
+- Check the diff against each previous issue — has it actually
+  been addressed, or just touched?
+- If resolved, leave it out of your issues list entirely — don't
+  re-list it, even to say it's fixed
+- If still unresolved, include it again, and say plainly that
+  it's still present from before
+- New issues you find this time get listed normally alongside
+  anything still outstanding
+
+---
+
+A FEW THINGS TO KEEP IN MIND
+
+- Only reference file paths and line numbers that actually
+  appear in the diff you were given. If you can't pin down
+  exactly where something is, say so rather than guessing.
+- If the diff was large and you were only given the most
+  relevant sections, mention that plainly in your summary so
+  the developer knows the review may not cover everything.
+- Stay scoped to this feature. If you notice unrelated problems
+  elsewhere in the codebase, that's not what this review is for.
+- If no diff or no PRD criteria were provided at all, say so
+  honestly instead of trying to review nothing.
 
 ---
 
 OUTPUT FORMAT
 
-Respond with ONLY a valid JSON object. No markdown outside
-the github_comment field. No backticks. No preamble.
-Just raw JSON.
+Respond with ONLY a valid JSON object. No markdown, no backticks,
+no preamble, no text outside the JSON.
 
 {
-  "summary": "string — 2 to 4 sentences summarizing the
-              overall quality of this PR against the PRD.
-              Be direct and honest. If it is good say so.
-              If it needs work say so.",
+  "summary": "string — a few honest sentences on how this PR
+              stacks up against the PRD, written like you'd
+              actually say it to the developer",
 
   "issues": [
     {
-      "title": "string — specific issue title, max 80 chars",
-      "description": "string — what is wrong and why it
-                      matters, max 300 chars",
-      "severity": "BLOCKING | NON_BLOCKING",
-      "file_path": "string or null — exact file path from diff",
-      "line_number": "integer or null — exact line number",
-      "prd_requirement_violated": "string — AC label or
-                                   General best practice",
-      "suggested_fix": "string — specific actionable fix,
-                        max 200 chars",
-      "is_resolved": false,
-      "previously_flagged": "boolean — true if this issue
-                             appeared in a previous review"
+      "title": "string — short, specific, plain language",
+      "description": "string — what's wrong and why it matters",
+      "importance": "critical | minor",
+      "file_path": "string or null",
+      "line_number": "integer or null",
+      "related_to": "string — AC label or 'general issue'",
+      "suggested_fix": "string — a concrete, specific fix"
     }
   ],
 
-  "blocking_count": "integer — must match count of BLOCKING
-                     issues in array exactly",
-
-  "non_blocking_count": "integer — must match count of
-                          NON_BLOCKING issues in array exactly",
-
-  "acceptance_criteria_coverage": [
-    {
-      "label": "string — AC label e.g. AC-1",
-      "status": "IMPLEMENTED | NOT_IMPLEMENTED | PARTIAL",
-      "note": "string or null — only if PARTIAL or
-               NOT_IMPLEMENTED, reference the issue"
-    }
-  ],
-
-  "resolved_from_previous": [
-    "string — AC label or issue title that was in previous
-     review but is now resolved"
-  ],
-
-  "github_comment": "string — the full formatted markdown
-                     comment as described above",
-
-  "generated_by": "string — model name used for this review"
+  "generated_by": "string — the model name used"
 }
 
-Rules:
-- issues array can be empty — that is valid
-- blocking_count must exactly match BLOCKING issues in array
-- non_blocking_count must exactly match NON_BLOCKING issues
-- resolved_from_previous is empty array on first review
-- Every field is required
-- Do not add fields not listed above
-- is_resolved is always false in output — Alfred never
-  marks its own issues as resolved`;
+Notes on the output:
+- "issues" can be an empty array — that's a good and valid result
+- Every issue needs every field; use null only for file_path /
+  line_number when truly unknown
+- Keep the summary honest and specific, not generic praise or
+  generic criticism`;
 
-interface ReviewIssueOut {
-  title: string;
-  description: string;
-  severity: "BLOCKING" | "NON_BLOCKING";
-  file_path: string | null;
-  line_number: number | null;
-  prd_requirement_violated: string;
-  suggested_fix: string;
-  is_resolved: false;
-  previously_flagged: boolean;
+/** Importance → DB severity column mapping (schema kept as BLOCKING/NON_BLOCKING to avoid a migration). */
+const IMPORTANCE_TO_SEVERITY = { critical: "BLOCKING", minor: "NON_BLOCKING" } as const;
+
+function criticalIssues(issues: ReviewIssueOut[]): ReviewIssueOut[] {
+  return issues.filter((issue) => issue.importance === "critical");
 }
 
-interface ReviewResultOut {
-  summary: string;
-  issues: ReviewIssueOut[];
-  blocking_count: number;
-  non_blocking_count: number;
-  acceptance_criteria_coverage: { label: string; status: string; note: string | null }[];
-  resolved_from_previous: string[];
-  github_comment: string;
-  generated_by: string;
-}
+/** Builds the GitHub PR comment deterministically in code — the model no longer generates markdown. Only the summary and critical issues are shown. */
+function formatGithubComment(reviewNumber: number, result: ReviewResultOut): string {
+  const critical = criticalIssues(result.issues);
 
-interface ReviewGuardrailError {
-  error: "no_diff" | "no_prd";
-  reason: string;
-}
+  const issuesText =
+    critical.length === 0
+      ? "No critical issues found ✅"
+      : critical
+          .map((issue, i) => {
+            const location = issue.file_path ? `\`${issue.file_path}\`${issue.line_number ? ` line ${issue.line_number}` : ""}` : "location unknown";
+            return `**${i + 1}. ${issue.title}**\n- File: ${location}\n- Related to: ${issue.related_to}\n- Suggested fix: ${issue.suggested_fix}`;
+          })
+          .join("\n\n");
 
-function isGuardrailError(result: ReviewResultOut | ReviewGuardrailError): result is ReviewGuardrailError {
-  return "error" in result;
+  return [
+    `## Alfred Review #${reviewNumber} 🤖`,
+    `### Summary\n${result.summary}`,
+    `### 🔴 Critical Issues (${critical.length})\n${issuesText}`,
+    `---\n*Reviewed by Alfred — AI Software Delivery Co-pilot*`,
+  ].join("\n\n");
 }
 
 /** Rough token estimate (chars / 4) — good enough for budget enforcement, not billing. */
@@ -353,7 +261,8 @@ function chunkDiff(diff: string, linesPerChunk = 40): string[] {
   const lines = diff.split("\n");
   const chunks: string[] = [];
   for (let i = 0; i < lines.length; i += linesPerChunk) {
-    chunks.push(lines.slice(i, i + linesPerChunk).join("\n"));
+    const chunk = lines.slice(i, i + linesPerChunk).join("\n");
+    if (chunk.trim().length > 0) chunks.push(chunk);
   }
   return chunks;
 }
@@ -422,7 +331,7 @@ function formatPreviousIssues(
   return previousIssues
     .map(
       (issue) =>
-        `Review #${previousReview.reviewNumber} — [${issue.severity}] ${issue.title}: ${issue.description ?? ""} (${issue.prdRequirementViolated ?? "General best practice"})`,
+        `Review #${previousReview.reviewNumber} — [critical] ${issue.title}: ${issue.description ?? ""} (${issue.prdRequirementViolated ?? "general issue"})`,
     )
     .join("\n");
 }
@@ -505,15 +414,17 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
     return { status: "blocked", reason: "no_prd" };
   }
 
-  const billingCheck = await run("check-billing-limit", async () => checkBillingLimit(feature.workspaceId, "ai_reviews"));
+  const credits = await run("check-and-deduct-credits", async () =>
+    checkAndDeductCredits(feature.workspaceId, workflowType === "re_review" ? "re_review" : "ai_review"),
+  );
 
-  if (!billingCheck.allowed) {
+  if (!credits.allowed) {
     await run("save-billing-block", async () => {
       await reportWorkflowProgress(featureId, workflowType, {
         status: "failed",
-        progressMessage: "Review blocked — plan limit reached",
+        progressMessage: "Review blocked — out of AI credits",
         progressPercent: 100,
-        errorMessage: "Free plan AI review limit reached. Upgrade to Pro to continue.",
+        errorMessage: "Out of AI credits. Upgrade or wait for your next monthly reset.",
       });
 
       await db.insert(notifications).values({
@@ -521,7 +432,7 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
         workspaceId: feature.workspaceId,
         type: "review_blocked",
         title: "AI review blocked",
-        message: "Free plan AI review limit reached. Upgrade to Pro to continue.",
+        message: "Out of AI credits. Upgrade or wait for your next monthly reset.",
         featureId,
       });
     });
@@ -540,6 +451,18 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
     return { diffSection: section, queryEmbedding: queryEmbedding! };
   });
 
+  if (!diffSection.text) {
+    await run("save-no-diff-rejection", async () => {
+      await reportWorkflowProgress(featureId, workflowType, {
+        status: "failed",
+        progressMessage: "Review blocked — no PR diff found",
+        progressPercent: 100,
+        errorMessage: "No PR diff was provided for review",
+      });
+    });
+    return { status: "blocked", reason: "no_diff" };
+  }
+
   const codebaseContext = await run("fetch-codebase-context", async () => {
     return getCodebaseContext(repository.id, queryEmbedding);
   });
@@ -549,8 +472,7 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
   });
 
   const result = await run("call-claude-for-review", async () => {
-    const prompt = AI_REVIEW_SYSTEM_PROMPT.replaceAll("{{REVIEW_NUMBER}}", String(reviewNumber))
-      .replace("{{FEATURE_TITLE}}", feature.title)
+    const prompt = AI_REVIEW_SYSTEM_PROMPT.replace("{{FEATURE_TITLE}}", feature.title)
       .replace("{{ACCEPTANCE_CRITERIA}}", acceptanceCriteriaText)
       .replace("{{TASKS}}", buildTasksText(taskRows))
       .replace("{{PR_DIFF}}", diffSection.text || "")
@@ -561,29 +483,17 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
         diffSection.isLargePR ? "This PR's diff exceeded the review size threshold." : "",
       );
 
-    return chatCompleteJSON<ReviewResultOut | ReviewGuardrailError>([{ role: "system", content: prompt }]);
+    const raw = await chatCompleteJSON<unknown>([{ role: "system", content: prompt }]);
+    const parsed = reviewResultOutSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new Error(`AI review response did not match expected structure: ${parsed.error.message}`);
+    }
+    return parsed.data;
   });
 
-  if (isGuardrailError(result)) {
-    await run("save-guardrail-rejection", async () => {
-      await reportWorkflowProgress(featureId, workflowType, {
-        status: "failed",
-        progressMessage: "Review blocked",
-        progressPercent: 100,
-        errorMessage: result.reason,
-      });
-
-      await db.insert(notifications).values({
-        userId: feature.createdBy,
-        workspaceId: feature.workspaceId,
-        type: "review_blocked",
-        title: "AI review blocked",
-        message: result.reason,
-        featureId,
-      });
-    });
-    return { status: "blocked", reason: result.error };
-  }
+  const critical = criticalIssues(result.issues);
+  const minorCount = result.issues.length - critical.length;
+  const githubComment = formatGithubComment(reviewNumber, result);
 
   const savedReview = await run("save-review-and-issues", async () => {
     // Decision 6: edit the existing PR comment on re-review instead of creating a new one.
@@ -595,18 +505,18 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
         featureId,
         pullRequestId,
         reviewNumber,
-        status: result.blocking_count > 0 ? "FAILED" : "PASSED",
+        status: critical.length > 0 ? "FAILED" : "PASSED",
         summary: result.summary,
-        blockingCount: result.blocking_count,
-        nonBlockingCount: result.non_blocking_count,
+        blockingCount: critical.length,
+        nonBlockingCount: minorCount,
         modelUsed: result.generated_by || getLLMModel(),
         isLargePR: diffSection.isLargePR,
-        resolvedFromPrevious: result.resolved_from_previous,
-        criteriaCoverage: result.acceptance_criteria_coverage,
       })
       .returning();
 
     if (!saved) throw new Error("Failed to save AI review");
+
+    const previousTitles = new Set(previousIssues.map((issue) => issue.title.toLowerCase()));
 
     if (result.issues.length > 0) {
       await db.insert(reviewIssues).values(
@@ -614,22 +524,22 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
           reviewId: saved.id,
           title: issue.title,
           description: issue.description,
-          severity: issue.severity,
+          severity: IMPORTANCE_TO_SEVERITY[issue.importance],
           filePath: issue.file_path,
           lineNumber: issue.line_number,
-          prdRequirementViolated: issue.prd_requirement_violated,
+          prdRequirementViolated: issue.related_to,
           suggestedFix: issue.suggested_fix,
           isResolved: false,
-          carriedOverFromReviewNumber: issue.previously_flagged ? (previousReview?.reviewNumber ?? null) : null,
+          carriedOverFromReviewNumber: previousTitles.has(issue.title.toLowerCase())
+            ? (previousReview?.reviewNumber ?? null)
+            : null,
         })),
       );
     }
 
-    // Decision 5: previous BLOCKING issues not re-flagged this round are resolved.
+    // Decision 5: previous critical issues not re-flagged this round are resolved.
     if (previousIssues.length > 0) {
-      const stillPresentTitles = new Set(
-        result.issues.filter((i) => i.previously_flagged).map((i) => i.title.toLowerCase()),
-      );
+      const stillPresentTitles = new Set(critical.map((issue) => issue.title.toLowerCase()));
       const resolvedIssueIds = previousIssues
         .filter((issue) => !stillPresentTitles.has(issue.title.toLowerCase()))
         .map((issue) => issue.id);
@@ -655,7 +565,7 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
         owner,
         name,
         pr.githubPrNumber,
-        result.github_comment,
+        githubComment,
         savedReview.existingCommentId,
       );
 
@@ -667,7 +577,7 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
   });
 
   await run("finalize-feature-status-and-notify", async () => {
-    const newStatus = result.blocking_count > 0 ? "CHANGES_REQUESTED" : "REVIEW_PASSED";
+    const newStatus = critical.length > 0 ? "CHANGES_REQUESTED" : "REVIEW_PASSED";
 
     await db.update(features).set({ status: newStatus, updatedAt: new Date() }).where(eq(features.id, featureId));
 
@@ -675,7 +585,7 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
       userId: feature.createdBy,
       workspaceId: feature.workspaceId,
       type: "review_complete",
-      title: result.blocking_count > 0 ? "Review found blocking issues" : "Review passed",
+      title: critical.length > 0 ? "Review found critical issues" : "Review passed",
       message: result.summary,
       featureId,
     });
@@ -687,7 +597,7 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
     });
   });
 
-  if (result.blocking_count === 0) {
+  if (critical.length === 0) {
     await run("trigger-release-readiness-check", async () => {
       await inngest.send({ name: "feature/release-readiness.requested", data: { featureId } });
     });

@@ -44,11 +44,11 @@ export function Navbar() {
         <Logo />
         <NavItems
           items={navItems}
-          className="text-base font-bold text-foreground/70 hover:text-foreground"
+          className="text-lg font-bold text-foreground/70 hover:text-foreground"
         />
         <div className="relative z-20 flex items-center gap-3">
           <ThemeToggle />
-          <Button variant="ghost" className="text-base font-bold" render={<Link href="/login" />} nativeButton={false}>
+          <Button variant="ghost" className="text-lg font-bold" render={<Link href="/login" />} nativeButton={false}>
             Log in
           </Button>
           <Button
@@ -85,7 +85,7 @@ export function Navbar() {
               key={link.href}
               href={link.href}
               onClick={() => setIsMenuOpen(false)}
-              className="relative text-base font-semibold text-neutral-600 dark:text-neutral-300"
+              className="relative text-lg font-semibold text-neutral-600 dark:text-neutral-300"
             >
               {link.label}
             </a>
@@ -93,7 +93,7 @@ export function Navbar() {
           <div className="flex w-full flex-col gap-4">
             <Button
               variant="ghost"
-              className="text-base font-bold justify-start px-0"
+              className="text-lg font-bold justify-start px-0"
               onClick={() => setIsMenuOpen(false)}
               render={<Link href="/login" />} nativeButton={false}
             >

@@ -144,7 +144,7 @@ export function WorkspaceOnboardingClient() {
     <div className="relative flex min-h-screen flex-col items-center justify-center bg-background px-6 py-16">
       <div className="mb-8 flex w-full max-w-md flex-col gap-2 text-center">
         <h1 className="text-3xl font-bold text-foreground">Set up your workspace</h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-lg text-muted-foreground">
           This is where your team and projects will live.
         </p>
       </div>
@@ -228,8 +228,8 @@ export function WorkspaceOnboardingClient() {
             >
               <CheckCircleIcon weight="fill" className="size-12 text-success" />
             </motion.div>
-            <p className="text-base font-medium text-foreground">Workspace ready</p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-lg font-medium text-foreground">Workspace ready</p>
+            <p className="text-lg text-muted-foreground">
               Taking you to invite your team...
             </p>
           </motion.div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
+import { BrainIcon } from "@phosphor-icons/react"
 
 import { AlfredAvatar } from "./alfred-avatar"
 
@@ -22,9 +23,9 @@ export function ThinkingBubble() {
       initial={{ opacity: 0, y: 12, filter: "blur(4px)" }}
       animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
       transition={{ duration: 0.25 }}
-      className="grid grid-cols-[28px_1fr] items-start gap-3"
+      className="grid grid-cols-[32px_1fr] items-start gap-3"
     >
-      <AlfredAvatar pulse />
+      <AlfredAvatar pulse icon={BrainIcon} />
       <div className="flex items-center gap-2 rounded-lg bg-muted px-4 py-3">
         <div className="flex items-center gap-1">
           {[0, 1, 2].map((i) => (
@@ -36,7 +37,7 @@ export function ThinkingBubble() {
             />
           ))}
         </div>
-        <span className="text-xs text-muted-foreground">{THINKING_STAGES[stage]}</span>
+        <span className="text-sm text-muted-foreground">{THINKING_STAGES[stage]}</span>
       </div>
     </motion.div>
   )

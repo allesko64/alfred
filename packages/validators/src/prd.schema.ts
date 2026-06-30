@@ -7,8 +7,6 @@ export const createPRDSchema = z.object({
   nonGoals: z.array(z.string()).default([]),
   userStories: z.array(z.string()).default([]),
   acceptanceCriteria: z.array(z.string()).default([]),
-  edgeCases: z.array(z.string()).default([]),
-  successMetrics: z.array(z.string()).default([]),
   assumptions: z.array(z.string()).default([]),
   scopeWarning: z.string().nullable().optional(),
   rawContent: z.string().optional(),

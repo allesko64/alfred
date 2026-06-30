@@ -253,7 +253,7 @@ export const githubRouter = createTRPCRouter({
 
   /**
    * Connects an additional repository to an existing workspace (post-onboarding).
-   * Free plan is limited to one repo total, enforced here.
+   * Capped per plan (see PLAN_LIMITS in billing-limits.ts), enforced here.
    */
   connectRepository: workspaceProcedure
     .input(connectRepositorySchema)
@@ -262,7 +262,7 @@ export const githubRouter = createTRPCRouter({
       if (!limit.allowed) {
         throw new TRPCError({
           code: "FORBIDDEN",
-          message: "You've reached your free plan limit. Upgrade to Pro.",
+          message: "You've reached your plan's connected repo limit. Upgrade for more.",
         });
       }
 

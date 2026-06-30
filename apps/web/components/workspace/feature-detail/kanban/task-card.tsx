@@ -41,7 +41,7 @@ export function TaskCard({
       <div className="flex flex-1 flex-col gap-2">
         <span className="text-sm font-medium text-foreground">{task.title}</span>
         {task.description && (
-          <span className="line-clamp-2 text-xs font-normal text-muted-foreground">{task.description}</span>
+          <span className="line-clamp-2 text-sm font-normal text-muted-foreground">{task.description}</span>
         )}
         <div className="flex items-center justify-between gap-2 pt-1">
           <PriorityBadge priority={task.priority} />

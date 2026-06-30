@@ -1,11 +1,17 @@
 import { TRPCError } from "@trpc/server";
-import { type BillingLimitType, billingSubscriptions, checkBillingLimit, workspaces } from "@alfred/db";
+import {
+  type BillingLimitType,
+  billingSubscriptions,
+  checkBillingLimit,
+  getCreditsStatus,
+  workspaces,
+} from "@alfred/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { createTRPCRouter, requireWorkspaceRole, workspaceInputSchema, workspaceProcedure } from "../trpc";
 import { getRazorpayClient, getRazorpayPlanId, type PaidPlan } from "../lib/razorpay";
 
-const USAGE_TYPES: BillingLimitType[] = ["features", "prd_generations", "ai_reviews", "repos", "members"];
+const USAGE_TYPES: BillingLimitType[] = ["repos", "members"];
 
 /** Razorpay subscriptions require a fixed total_count — 12 monthly cycles, renewed by re-subscribing. */
 const SUBSCRIPTION_TOTAL_COUNT = 12;
@@ -27,10 +33,17 @@ export const billingRouter = createTRPCRouter({
     return { workspace, subscription: subscription ?? null };
   }),
 
-  /** Usage vs. free-plan limits for every gated resource — drives the billing page's usage meters. */
+  /** Usage vs. plan limits for every gated resource — drives the billing page's usage meters. */
   getUsage: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
-    const results = await Promise.all(USAGE_TYPES.map((type) => checkBillingLimit(ctx.workspaceId, type)));
-    return Object.fromEntries(USAGE_TYPES.map((type, i) => [type, results[i]]));
+    const [results, credits] = await Promise.all([
+      Promise.all(USAGE_TYPES.map((type) => checkBillingLimit(ctx.workspaceId, type))),
+      getCreditsStatus(ctx.workspaceId),
+    ]);
+
+    return {
+      credits: { current: credits.limit - credits.remaining, limit: credits.limit },
+      ...Object.fromEntries(USAGE_TYPES.map((type, i) => [type, results[i]])),
+    };
   }),
 
   /** Creates (or reuses) a Razorpay customer + subscription and returns the hosted checkout URL. */

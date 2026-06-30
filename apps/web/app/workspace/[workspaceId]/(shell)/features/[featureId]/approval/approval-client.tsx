@@ -142,7 +142,7 @@ export function ApprovalClient() {
     return (
       <div className="flex max-w-[700px] flex-col items-center gap-1 py-16 text-center">
         <span className="text-sm font-medium text-muted-foreground">Approval</span>
-        <span className="text-xs text-muted-foreground/70">
+        <span className="text-sm text-muted-foreground/70">
           Opens once the AI review passes with no blocking issues
         </span>
       </div>
@@ -199,7 +199,7 @@ export function ApprovalClient() {
           <WarningCircleIcon className="mt-0.5 size-4 shrink-0 text-warning" />
           <div className="flex flex-1 flex-col gap-1">
             <span className="text-sm font-medium text-warning">Not ready for approval yet</span>
-            <span className="text-xs text-muted-foreground">{readinessRun?.progressMessage}</span>
+            <span className="text-sm text-muted-foreground">{readinessRun?.progressMessage}</span>
           </div>
           <Button
             size="sm"
@@ -219,7 +219,7 @@ export function ApprovalClient() {
             <CardTitle className="text-sm">PRD summary</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">{prd.problemStatement}</p>
+            <p className="text-lg text-muted-foreground">{prd.problemStatement}</p>
           </CardContent>
         </Card>
       )}
@@ -242,12 +242,12 @@ export function ApprovalClient() {
 
       {(reviewHistoryQuery.data?.reviews.length ?? 0) > 0 && (
         <details className="rounded-lg border border-border px-4 py-3">
-          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+          <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
             AI review history ({reviewHistoryQuery.data?.reviews.length})
           </summary>
           <div className="mt-3 flex flex-col gap-3">
             {reviewHistoryQuery.data?.reviews.map((review) => (
-              <div key={review.id} className="flex items-center justify-between gap-2 text-xs">
+              <div key={review.id} className="flex items-center justify-between gap-2 text-sm">
                 <span className="font-medium text-foreground">Review #{review.reviewNumber}</span>
                 <StatusBadge status={review.status} />
                 <span className="text-muted-foreground">
@@ -279,7 +279,7 @@ export function ApprovalClient() {
           <span className="text-sm font-medium text-success">Feature shipped!</span>
           <Link
             href={`/workspace/${workspaceId}/changelog`}
-            className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+            className="text-sm text-muted-foreground hover:text-foreground hover:underline"
           >
             View it on the changelog
           </Link>
@@ -289,7 +289,7 @@ export function ApprovalClient() {
       {feature.status === "REJECTED" && (
         <div className="flex flex-col gap-1 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-4">
           <span className="text-sm font-medium text-destructive">Rejected</span>
-          <span className="text-xs text-muted-foreground">{feature.rejectionReason}</span>
+          <span className="text-sm text-muted-foreground">{feature.rejectionReason}</span>
         </div>
       )}
 
