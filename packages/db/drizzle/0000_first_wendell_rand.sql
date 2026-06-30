@@ -1,3 +1,4 @@
+CREATE EXTENSION IF NOT EXISTS vector;--> statement-breakpoint
 CREATE TYPE "public"."billing_status" AS ENUM('active', 'past_due', 'cancelled', 'trialing');--> statement-breakpoint
 CREATE TYPE "public"."changelog_type" AS ENUM('feature', 'fix', 'improvement');--> statement-breakpoint
 CREATE TYPE "public"."clarification_role" AS ENUM('user', 'alfred');--> statement-breakpoint
