@@ -27,7 +27,7 @@ jobs:
           NEXT_PUBLIC_BETTER_AUTH_URL: "http://localhost:3000"
           NODE_OPTIONS: "--max-old-space-size=3072"
 
-  deploy:
+ deploy:
     needs: build-and-typecheck
     runs-on: ubuntu-latest
     steps:
@@ -39,6 +39,7 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
             set -e
+            export PATH="/root/.nvm/versions/node/v20.20.2/bin:$PATH"
             cd ${{ secrets.DEPLOY_PATH }}
             git fetch origin main
             git reset --hard origin/main
