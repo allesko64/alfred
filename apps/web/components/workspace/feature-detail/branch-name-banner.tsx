@@ -4,10 +4,24 @@ import { useState } from "react"
 import { CheckIcon, CopyIcon } from "@phosphor-icons/react"
 
 import { Button } from "@/components/ui/button"
+import { slugify } from "@/lib/utils"
 
-export function BranchNameBanner({ featureId }: { featureId: string }) {
+export function BranchNameBanner({
+  featureId,
+  featureTitle,
+  repoName,
+}: {
+  featureId: string
+  featureTitle: string
+  repoName: string | null
+}) {
   const [copied, setCopied] = useState(false)
-  const branchName = `alfred/${featureId}`
+  // The trailing 8-char id is what auto-link matching keys off of (see
+  // BRANCH_PATTERN in pr-ingestion.workflow.ts) — the rest is for readability.
+  const titleSlug = slugify(featureTitle) || "feature"
+  const repoSlug = repoName ? slugify(repoName) : null
+  const shortId = featureId.replace(/-/g, "").slice(0, 8)
+  const branchName = `${[repoSlug, titleSlug].filter(Boolean).join("/")}-${shortId}`
 
   async function handleCopy() {
     await navigator.clipboard.writeText(branchName)

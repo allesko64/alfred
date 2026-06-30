@@ -93,6 +93,7 @@ export function BillingClient() {
           title="Plans"
           description="Upgrade or downgrade your workspace plan at any time."
           showToggle={false}
+          compact
           currentPlanId={plan}
           renderAction={(p) => (
             <Button

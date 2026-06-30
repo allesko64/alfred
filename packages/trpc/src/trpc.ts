@@ -1,15 +1,28 @@
 import { initTRPC, TRPCError } from "@trpc/server";
+import { type OpenApiMeta } from "trpc-to-openapi";
 import superjson from "superjson";
 import { z } from "zod";
 import type { Context } from "./context";
 import { type MembershipRole, requireMembership } from "./permissions";
 
-const t = initTRPC.context<Context>().create({
-  transformer: superjson,
-  errorFormatter({ shape }) {
-    return shape;
-  },
-});
+const t = initTRPC
+  .context<Context>()
+  .meta<OpenApiMeta>()
+  .create({
+    transformer: superjson,
+    errorFormatter({ shape, error }) {
+      return {
+        ...shape,
+        data: {
+          ...shape.data,
+          // Normalise the code onto the top-level shape so clients can read
+          // `error.data.code` without digging through the nested data object.
+          code: error.code,
+          httpStatus: shape.data?.httpStatus,
+        },
+      };
+    },
+  });
 
 export const createTRPCRouter = t.router;
 export const middleware = t.middleware;
@@ -34,27 +47,31 @@ const isAuthed = middleware(({ ctx, next }) => {
 /** Requires a valid session. */
 export const protectedProcedure = publicProcedure.use(isAuthed);
 
-export const workspaceInputSchema = z.object({ workspaceId: z.string().uuid() });
-
-const hasWorkspaceMembership = middleware(async ({ ctx, getRawInput, next }) => {
-  if (!ctx.user) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
-
-  const raw = await getRawInput();
-  const { workspaceId } = workspaceInputSchema.parse(raw);
-
-  const role = await requireMembership(ctx.user.id, workspaceId);
-
-  return next({
-    ctx: {
-      ...ctx,
-      user: ctx.user,
-      workspaceId,
-      role,
-    },
-  });
+export const workspaceInputSchema = z.object({
+  workspaceId: z.string().uuid(),
 });
+
+const hasWorkspaceMembership = middleware(
+  async ({ ctx, getRawInput, next }) => {
+    if (!ctx.user) {
+      throw new TRPCError({ code: "UNAUTHORIZED" });
+    }
+
+    const raw = await getRawInput();
+    const { workspaceId } = workspaceInputSchema.parse(raw);
+
+    const role = await requireMembership(ctx.user.id, workspaceId);
+
+    return next({
+      ctx: {
+        ...ctx,
+        user: ctx.user,
+        workspaceId,
+        role,
+      },
+    });
+  },
+);
 
 /** Requires a valid session AND active membership in `input.workspaceId`. */
 export const workspaceProcedure = publicProcedure.use(hasWorkspaceMembership);

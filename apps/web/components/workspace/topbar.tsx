@@ -5,18 +5,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { BellIcon } from "@phosphor-icons/react"
 
 import { useTRPC } from "@/lib/trpc/client"
+import { getNotificationPath } from "@/lib/notification-link"
 import { cn, formatRelativeTime } from "@/lib/utils"
 import { Button as StatefulButton } from "@/components/ui/stateful-button"
 import { Badge } from "@/components/ui/badge"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { GooDropdown } from "@/components/ui/goo-dropdown"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { SearchPalette } from "@/components/workspace/search-palette"
 
@@ -46,10 +39,11 @@ export function TopBar({ title, workspaceId }: { title: string; workspaceId: str
     }),
   )
 
-  function onNotificationClick(notificationId: string, featureId: string | null) {
+  function onNotificationClick(notificationId: string, type: string, featureId: string | null) {
     markRead.mutate({ notificationId })
-    if (featureId) {
-      router.push(`/workspace/${workspaceId}/features/${featureId}/review`)
+    const path = getNotificationPath(workspaceId, { type, featureId })
+    if (path) {
+      router.push(path)
     }
   }
 
@@ -60,61 +54,59 @@ export function TopBar({ title, workspaceId }: { title: string; workspaceId: str
       <SearchPalette workspaceId={workspaceId} />
 
       <div className="flex shrink-0 items-center gap-3">
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
+        <GooDropdown
+          panelWidth={320}
+          align="end"
+          trigger={
+            <span className="relative flex size-9 items-center justify-center text-muted-foreground hover:text-foreground">
+              <BellIcon className="size-5" />
+              {unreadCount > 0 && (
+                <Badge
+                  variant="destructive"
+                  className="absolute right-0.5 top-0.5 h-4 min-w-4 justify-center rounded-full px-1 text-[10px]"
+                >
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </Badge>
+              )}
+            </span>
+          }
+        >
+          <div className="flex items-center justify-between px-2 py-1.5">
+            <span className="text-sm text-muted-foreground">Notifications</span>
+            {unreadCount > 0 && (
               <button
                 type="button"
-                className="relative rounded-lg text-muted-foreground hover:text-foreground"
-              />
-            }
-          >
-            <BellIcon className="size-5" />
-            {unreadCount > 0 && (
-              <Badge
-                variant="destructive"
-                className="absolute -right-1.5 -top-1.5 h-4 min-w-4 justify-center rounded-full px-1 text-[10px]"
+                className="text-sm text-muted-foreground hover:text-foreground"
+                onClick={() => markAllRead.mutate()}
               >
-                {unreadCount > 9 ? "9+" : unreadCount}
-              </Badge>
+                Mark all as read
+              </button>
             )}
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80">
-            <div className="flex items-center justify-between px-2 py-1.5">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel className="p-0">Notifications</DropdownMenuLabel>
-              </DropdownMenuGroup>
-              {unreadCount > 0 && (
-                <button
-                  type="button"
-                  className="text-sm text-muted-foreground hover:text-foreground"
-                  onClick={() => markAllRead.mutate()}
-                >
-                  Mark all as read
-                </button>
-              )}
-            </div>
-            <DropdownMenuSeparator />
-            {unread?.length ? (
-              unread.map((notification) => (
-                <DropdownMenuItem
-                  key={notification.id}
-                  className={cn("flex-col items-start gap-0.5 whitespace-normal", !notification.featureId && "cursor-default")}
-                  onClick={() => onNotificationClick(notification.id, notification.featureId)}
-                >
-                  <span className="text-sm font-medium text-foreground">
-                    {notification.title ?? notification.type}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {formatRelativeTime(notification.createdAt)}
-                  </span>
-                </DropdownMenuItem>
-              ))
-            ) : (
-              <DropdownMenuItem disabled>No unread notifications</DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </div>
+          <div className="-mx-1 h-px bg-border" />
+          {unread?.length ? (
+            unread.map((notification) => (
+              <button
+                key={notification.id}
+                type="button"
+                className={cn(
+                  "flex w-full flex-col items-start gap-0.5 whitespace-normal rounded-md px-2 py-2 text-left hover:bg-accent",
+                  !getNotificationPath(workspaceId, notification) && "cursor-default",
+                )}
+                onClick={() => onNotificationClick(notification.id, notification.type, notification.featureId)}
+              >
+                <span className="text-sm font-medium text-foreground">
+                  {notification.title ?? notification.type}
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  {formatRelativeTime(notification.createdAt)}
+                </span>
+              </button>
+            ))
+          ) : (
+            <div className="px-2 py-2 text-sm text-muted-foreground">No unread notifications</div>
+          )}
+        </GooDropdown>
         <ThemeToggle size="icon-sm" />
         <StatefulButton
           className="min-w-0 px-4 py-1.5 text-sm"

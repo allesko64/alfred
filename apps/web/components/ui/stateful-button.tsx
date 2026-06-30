@@ -81,8 +81,6 @@ export const Button = ({ className, children, ...props }: ButtonProps) => {
 
   return (
     <motion.button
-      layout
-      layoutId="button"
       ref={scope}
       className={cn(
         "flex min-w-[120px] cursor-pointer items-center justify-center gap-2 rounded-full bg-[#0075DE] px-4 py-2 font-medium text-white ring-offset-2 transition duration-200 hover:ring-2 hover:ring-[#0075DE] dark:ring-offset-black",

@@ -10,7 +10,7 @@ import { useTRPC } from "@/lib/trpc/client"
 import { Progress } from "@/components/ui/progress"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlfredLogo } from "@/components/icons/alfred-logo"
-import { LoaderFive } from "@/components/ui/loader"
+import { LoaderFive, LoaderOne } from "@/components/ui/loader"
 import { Button as StatefulButton } from "@/components/ui/stateful-button"
 import { useSetFeatureHeaderAction } from "@/components/workspace/feature-detail/feature-header-actions"
 
@@ -80,7 +80,18 @@ export function PRDClient() {
   const trpc = useTRPC()
   const queryClient = useQueryClient()
 
-  const { data: feature } = useQuery(trpc.feature.getById.queryOptions({ workspaceId, featureId }))
+  // Poll while PRD/task generation is in flight — otherwise this query only
+  // fetches once and never notices the background job finishing, leaving the
+  // writing-loader stuck on screen forever instead of swapping in the PRD.
+  const { data: feature } = useQuery(
+    trpc.feature.getById.queryOptions(
+      { workspaceId, featureId },
+      { refetchInterval: (query) => {
+        const status = query.state.data?.status
+        return status === "PRD_GENERATION" || status === "TASK_GENERATION" ? 2000 : false
+      } },
+    ),
+  )
   const isWritingPRD = feature?.status === "PRD_GENERATION"
   const isGeneratingTasks = feature?.status === "TASK_GENERATION"
 
@@ -160,6 +171,18 @@ export function PRDClient() {
           <span className="text-sm font-medium text-destructive">PRD generation was blocked</span>
           <span className="text-sm text-muted-foreground">{feature.rejectionReason}</span>
         </div>
+      </div>
+    )
+  }
+
+  if (feature?.status === "DRAFT" || feature?.status === "CLARIFYING") {
+    return (
+      <div className="flex max-w-[700px] flex-col items-center gap-2 py-16 text-center">
+        <span className="text-sm font-medium text-foreground">Finish the conversation first</span>
+        <span className="max-w-sm text-sm text-muted-foreground">
+          Alfred is still gathering details about this feature. Answer the remaining questions in the
+          conversation and the PRD will start generating automatically.
+        </span>
       </div>
     )
   }
@@ -255,13 +278,10 @@ export function PRDClient() {
                 </>
               ) : (
                 <>
-                  <div className="flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground animate-pulse">
-                    <AlfredLogo className="size-6" />
-                  </div>
-                  <div className="flex w-full flex-col gap-2">
-                    <LoaderFive text={taskProgress?.progressMessage ?? "Alfred is breaking down tasks..."} />
-                    <Progress value={taskProgress?.progressPercent ?? 20} />
-                  </div>
+                  <LoaderOne />
+                  <span className="text-sm font-medium text-foreground">
+                    {taskProgress?.progressMessage ?? "Alfred is breaking down tasks..."}
+                  </span>
                 </>
               )}
             </div>

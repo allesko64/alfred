@@ -1,159 +1,120 @@
-# Turborepo starter
+# Alfred — The AI Software Engineer
 
-This Turborepo starter is maintained by the Turborepo core team.
+Alfred is an AI-powered software engineer that helps you manage feature requests, generate PRDs, create tasks, and automate code reviews. It integrates deeply with GitHub to streamline your development workflow.
 
-## Using this example
+## Project Overview
 
-Run the following command:
+Alfred automates the feature lifecycle through five distinct phases:
 
-```sh
-npx create-turbo@latest
+1.  **Feature Submission & Triage:** Smart suggestion of duplicates and clarification of requirements via an AI agent.
+2.  **PRD Generation:** Automated generation of comprehensive Product Requirement Documents.
+3.  **Task Management:** Breaking down PRDs into actionable tasks on a Kanban board.
+4.  **GitHub Integration:** Automated PR ingestion, description generation, and manual PR linking.
+5.  **AI Review Loop:** Continuous AI-powered code reviews with human-in-the-loop approvals.
+
+## Tech Stack
+
+| Category | Technology |
+| :--- | :--- |
+| **Framework** | [Next.js 15](https://nextjs.org/) (App Router) |
+| **Language** | [TypeScript](https://www.typescriptlang.org/) |
+| **Monorepo** | [Turborepo](https://turbo.build/) |
+| **API Layer** | [tRPC](https://trpc.io/) |
+| **Database** | [PostgreSQL](https://www.postgresql.org/) with [Drizzle ORM](https://orm.drizzle.team/) |
+| **Auth** | [Better Auth](https://better-auth.com/) |
+| **AI** | [Vercel AI SDK](https://sdk.vercel.ai/) (OpenAI / Anthropic) |
+| **Workflows** | [Inngest](https://www.inngest.com/) |
+| **Styling** | [Tailwind CSS](https://tailwindcss.com/), [Shadcn UI](https://ui.shadcn.com/) |
+| **Payments** | [Razorpay](https://razorpay.com/) |
+| **Cache** | [Upstash Redis](https://upstash.com/) |
+| **Vector Search** | [pgvector](https://github.com/pgvector/pgvector) |
+
+## Architecture
+
+```mermaid
+graph TD
+    User[User/Browser] --> NextJS[Next.js App]
+    NextJS --> TRPC[tRPC API Layer]
+    TRPC --> Services[Domain Services]
+    TRPC --> Permissions[Zanzibar Permissions]
+    Services --> DB[(PostgreSQL + pgvector)]
+    Services --> Redis[Upstash Redis Cache]
+    Services --> AI[AI Agents - OpenAI/Anthropic]
+    Services --> Inngest[Inngest Workflows]
+    Inngest --> DB
+    Inngest --> GitHub[GitHub API]
+    GitHub --> Webhooks[GitHub Webhooks]
+    Webhooks --> Inngest
+    Services --> Razorpay[Razorpay Payments]
 ```
 
-## What's inside?
+## AI Features
 
-This Turborepo includes the following packages/apps:
+Alfred leverages advanced AI agents for:
+- **Clarification Agent:** Interviews the user to refine feature requests.
+- **PRD Generation:** Creates detailed specifications from conversations.
+- **Task Generation:** Breaks down features into technical tasks.
+- **Smart Duplicate Detection:** Finds similar feature requests using vector search.
+- **PR Description Auto-generator:** Summarizes code changes into readable PR notes.
+- **AI Code Review:** Provides technical feedback on Pull Requests.
+- **Release Readiness Check:** Evaluates if a feature is ready for shipping.
+- **Auto Changelog Generation:** Compiles shipped features into user-facing updates.
+- **Daily Digest:** Personalized summary of project activity.
 
-### Apps and Packages
+## Setup Instructions
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+### Prerequisites
+- Node.js 20+
+- pnpm 9+
+- PostgreSQL with `pgvector` extension
+- Redis (Upstash recommended)
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+### 1. Clone the repository
+```bash
+git clone https://github.com/your-username/alfred.git
+cd alfred
 ```
 
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo build
-pnpm dlx turbo build
-pnpm exec turbo build
+### 2. Install dependencies
+```bash
+pnpm install
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
+### 3. Environment Setup
+Copy `.env.example` to `.env` and fill in the required values.
+```bash
+cp .env.example .env
 ```
 
-Without global `turbo`:
-
-```sh
-npx turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
+### 4. Database Setup
+```bash
+pnpm db:push
+pnpm db:seed
 ```
 
-### Develop
-
-To develop all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo dev
+### 5. Run the development server
+```bash
+pnpm dev
 ```
 
-Without global `turbo`, use your package manager:
+Visit `http://localhost:3000` to see Alfred in action.
 
-```sh
-cd my-turborepo
-npx turbo dev
-pnpm exec turbo dev
-pnpm exec turbo dev
-```
+## Environment Variables
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+See [.env.example](.env.example) for a full list of environment variables and their descriptions.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+## Inngest Workflows
 
-```sh
-turbo dev --filter=web
-```
+Alfred uses Inngest for reliable, event-driven background processing:
+- `feature.submitted`: Triggers smart duplicate detection.
+- `prd.generate`: Orchestrates the AI PRD generation process.
+- `github.webhook`: Handles incoming PR events.
+- `review.request`: Initiates AI code review workflows.
+- `billing.cycle`: Manages subscription states.
 
-Without global `turbo`:
+## API Documentation
 
-```sh
-npx turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
+Interactive API documentation is available at `/docs` when running the application. It is powered by Scalar and generated from our tRPC schemas.
 
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-pnpm exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-pnpm exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+---
+Built with ❤️ by the Alfred team.

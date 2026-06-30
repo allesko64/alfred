@@ -34,7 +34,7 @@ export function MessageBubble({
         transition={{ duration: 0.25 }}
         className="flex justify-end"
       >
-        <div className="max-w-[60%] rounded-lg bg-card px-4 py-3 text-sm text-foreground">
+        <div className="max-w-[60%] rounded-xl bg-white/70 px-4 py-3 text-sm font-semibold text-black shadow-md backdrop-blur-md">
           {message.content}
         </div>
       </motion.div>
@@ -50,7 +50,7 @@ export function MessageBubble({
     >
       <AlfredAvatar icon={BrainIcon} />
       <div className="flex flex-col gap-2">
-        <div className="max-w-[70%] rounded-lg bg-muted px-4 py-3 text-sm text-foreground">
+        <div className="max-w-[70%] rounded-xl bg-white/10 px-4 py-3 text-sm text-white shadow-md backdrop-blur-md">
           {message.content}
         </div>
         {/* Once the message has been answered (it's no longer the one awaiting a
@@ -64,14 +64,14 @@ export function MessageBubble({
                   key={option}
                   type="button"
                   onClick={() => onOptionClick?.(option)}
-                  className="inline-flex w-fit items-center rounded-full border border-border bg-card px-3 py-1.5 text-sm text-foreground transition-colors hover:border-[#0075DE] hover:text-[#0075DE]"
+                  className="inline-flex w-fit items-center rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-sm text-white backdrop-blur-md transition-colors hover:border-[#338FE6] hover:text-[#338FE6]"
                 >
                   {option}
                 </button>
               ) : (
                 <span
                   key={option}
-                  className="inline-flex w-fit items-center rounded-full border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground"
+                  className="inline-flex w-fit items-center rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-sm text-white/60 backdrop-blur-md"
                 >
                   {option}
                 </span>
@@ -81,13 +81,13 @@ export function MessageBubble({
               <button
                 type="button"
                 onClick={() => setCustomSelected(true)}
-                className="inline-flex w-fit items-center gap-1 px-1 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                className="inline-flex w-fit items-center gap-1 px-1 py-1.5 text-sm text-white/60 transition-colors hover:text-white"
               >
                 <PencilSimpleIcon className="size-3" />
                 {CUSTOM_OPTION}
               </button>
             ) : (
-              <span className="inline-flex w-fit items-center gap-1 px-1 py-1.5 text-sm text-muted-foreground">
+              <span className="inline-flex w-fit items-center gap-1 px-1 py-1.5 text-sm text-white/60">
                 <PencilSimpleIcon className="size-3" />
                 {CUSTOM_OPTION}
               </span>

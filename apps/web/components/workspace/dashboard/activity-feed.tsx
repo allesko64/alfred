@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from "motion/react"
 import { BellSimpleIcon } from "@phosphor-icons/react"
 
 import { useTRPC } from "@/lib/trpc/client"
+import { getNotificationPath } from "@/lib/notification-link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Timestamp } from "@/components/workspace/timestamp"
@@ -59,6 +60,8 @@ export function ActivityFeed({ workspaceId }: { workspaceId: string }) {
                 </>
               )
 
+              const path = getNotificationPath(workspaceId, item)
+
               return (
                 <motion.div
                   key={item.id}
@@ -72,9 +75,9 @@ export function ActivityFeed({ workspaceId }: { workspaceId: string }) {
                     newIds.has(item.id) && "activity-new",
                   )}
                 >
-                  {item.featureId ? (
+                  {path ? (
                     <Link
-                      href={`/workspace/${workspaceId}/features/${item.featureId}/review`}
+                      href={path}
                       className="group flex items-start gap-2.5 pl-2 hover:text-foreground"
                     >
                       {content}

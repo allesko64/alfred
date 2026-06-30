@@ -25,8 +25,8 @@ export function PublicChangelogClient() {
   if (isError) {
     return (
       <div className="flex min-h-svh flex-col items-center justify-center gap-1 p-6 text-center">
-        <span className="text-sm font-medium text-foreground">Changelog not found</span>
-        <span className="text-sm text-muted-foreground">This workspace doesn&apos;t have a public changelog.</span>
+        <span className="text-base font-medium text-foreground">Changelog not found</span>
+        <span className="text-base text-muted-foreground">This workspace doesn&apos;t have a public changelog.</span>
       </div>
     )
   }
@@ -38,21 +38,21 @@ export function PublicChangelogClient() {
           <ScrollIcon className="size-5" />
           {isLoading ? <Skeleton className="h-6 w-40" /> : `${data?.workspaceName} changelog`}
         </span>
-        <span className="text-sm text-muted-foreground">What&apos;s shipped, as it ships.</span>
+        <span className="text-base text-muted-foreground">What&apos;s shipped, as it ships.</span>
       </div>
 
       {isLoading ? (
         <Skeleton className="h-48 w-full" />
       ) : !data?.entries.length ? (
         <div className="flex flex-col items-center gap-1 py-16 text-center">
-          <span className="text-sm font-medium text-muted-foreground">Nothing shipped yet</span>
+          <span className="text-base font-medium text-muted-foreground">Nothing shipped yet</span>
         </div>
       ) : (
         <div className="flex flex-col gap-4">
           {data.entries.map((entry) => (
             <div key={entry.id} className="flex flex-col gap-1 rounded-lg border border-border px-4 py-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-1.5 font-mono text-sm font-semibold text-foreground">
+                <span className="flex items-center gap-1.5 font-mono text-base font-semibold text-foreground">
                   <TagIcon className="size-3.5 text-muted-foreground" />
                   {entry.version}
                 </span>
@@ -61,8 +61,8 @@ export function PublicChangelogClient() {
                 </Badge>
               </div>
               <p className="text-lg text-foreground">{entry.entry}</p>
-              <span className="text-sm text-muted-foreground">{entry.featureTitle}</span>
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-base text-muted-foreground">{entry.featureTitle}</span>
+              <span className="text-base text-muted-foreground">
                 {new Date(entry.createdAt).toLocaleDateString(undefined, { dateStyle: "medium" })}
               </span>
             </div>

@@ -24,6 +24,12 @@ export function TasksClient() {
   const { data: feature } = useQuery(trpc.feature.getById.queryOptions({ workspaceId, featureId }))
   const isGeneratingTasks = feature?.status === "TASK_GENERATION"
 
+  const { data: repositories } = useQuery(trpc.github.listRepositories.queryOptions({ workspaceId }))
+  const connectedRepo =
+    repositories?.find((repo) => repo.projectId === feature?.projectId && !repo.disconnectedAt) ??
+    repositories?.find((repo) => !repo.disconnectedAt)
+  const repoName = connectedRepo?.name ?? connectedRepo?.fullName ?? null
+
   const { data: progress } = useQuery(
     trpc.feature.getWorkflowProgress.queryOptions(
       { workspaceId, featureId },
@@ -58,7 +64,7 @@ export function TasksClient() {
   const tasks = tasksQuery.data ?? []
   const members = membersQuery.data ?? []
   const isApproved = feature?.status === "IN_DEVELOPMENT"
-  const showApprovalAction = tasks.length > 0 && !isGeneratingTasks && !isApproved
+  const showApprovalAction = tasks.length > 0 && !isGeneratingTasks && feature?.status === "PLANNING"
 
   useSetFeatureHeaderAction(
     useMemo(() => {
@@ -77,22 +83,24 @@ export function TasksClient() {
   )
 
   // Once approved, show a brief success state, then dismiss it — the user
-  // stays on the kanban board rather than being navigated away.
-  const wasApprovedRef = useRef(false)
+  // stays on the kanban board rather than being navigated away. Only fires
+  // for a *live* transition into IN_DEVELOPMENT (status changing while this
+  // component is mounted), not when the feature was already approved before
+  // the page loaded — otherwise it'd replay every time you navigate back.
+  const previousStatusRef = useRef<string | undefined>(undefined)
   const [showApproved, setShowApproved] = useState(false)
 
   useEffect(() => {
-    if (!isApproved) {
-      wasApprovedRef.current = false
-      return
-    }
-    if (!wasApprovedRef.current) {
-      wasApprovedRef.current = true
+    if (!feature) return
+    const previousStatus = previousStatusRef.current
+    previousStatusRef.current = feature.status
+
+    if (previousStatus !== undefined && previousStatus !== "IN_DEVELOPMENT" && isApproved) {
       setShowApproved(true)
       const timeout = setTimeout(() => setShowApproved(false), 1400)
       return () => clearTimeout(timeout)
     }
-  }, [isApproved])
+  }, [feature, isApproved])
 
   if (isGeneratingTasks || tasksQuery.isLoading) {
     return (
@@ -119,7 +127,7 @@ export function TasksClient() {
 
   return (
     <div className="flex flex-col gap-3 pt-1 pb-6">
-      <BranchNameBanner featureId={featureId} />
+      <BranchNameBanner featureId={featureId} featureTitle={feature?.title ?? ""} repoName={repoName} />
       <KanbanBoard
         tasks={tasks}
         members={members}

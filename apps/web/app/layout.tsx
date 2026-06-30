@@ -4,6 +4,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { GlobalThemeToggle } from "@/components/global-theme-toggle"
 import { TRPCReactProvider } from "@/lib/trpc/Provider"
+import { Toaster } from "@/components/ui/sonner"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,6 +33,7 @@ export default function RootLayout({
           <TRPCReactProvider>
             <GlobalThemeToggle />
             {children}
+            <Toaster />
           </TRPCReactProvider>
         </ThemeProvider>
       </body>

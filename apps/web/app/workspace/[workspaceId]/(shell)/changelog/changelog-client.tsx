@@ -41,7 +41,7 @@ export function ChangelogClient() {
             href={`/changelog/${workspace.slug}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 self-start text-sm text-muted-foreground hover:text-foreground hover:underline"
+            className="flex items-center gap-1.5 self-start text-base text-muted-foreground hover:text-foreground hover:underline"
           >
             <ScrollIcon className="size-3.5" />
             View public changelog
@@ -53,8 +53,8 @@ export function ChangelogClient() {
         ) : !entries || entries.length === 0 ? (
           <div className="flex max-w-[700px] flex-col items-center gap-1 py-16 text-center">
             <ScrollIcon className="size-5 text-muted-foreground" />
-            <span className="text-sm font-medium text-muted-foreground">No entries yet</span>
-            <span className="text-sm text-muted-foreground/70">
+            <span className="text-base font-medium text-muted-foreground">No entries yet</span>
+            <span className="text-base text-muted-foreground/70">
               A changelog entry is written automatically every time a feature ships
             </span>
           </div>
@@ -67,19 +67,19 @@ export function ChangelogClient() {
                   <div className="mt-1 w-px flex-1 bg-border" />
                 </div>
                 <div className="flex flex-1 flex-col gap-3 pb-2">
-                  <span className="font-mono text-sm font-semibold text-foreground">{version}</span>
+                  <span className="font-mono text-base font-semibold text-foreground">{version}</span>
                   {grouped[version]!.map((entry) => (
                     <div key={entry.id} className="flex flex-col gap-1 rounded-lg border border-border px-4 py-3">
                       <div className="flex items-center justify-between gap-2">
                         <Badge variant={TYPE_BADGE_VARIANT[entry.type] ?? "secondary"} className="capitalize">
                           {entry.type}
                         </Badge>
-                        <Timestamp date={entry.createdAt} className="text-[10px] text-muted-foreground" />
+                        <Timestamp date={entry.createdAt} className="text-base text-muted-foreground" />
                       </div>
                       <p className="text-lg text-foreground">{entry.entry}</p>
                       <Link
                         href={`/workspace/${workspaceId}/features/${entry.featureId}`}
-                        className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+                        className="text-base text-muted-foreground hover:text-foreground hover:underline"
                       >
                         {entry.featureTitle}
                       </Link>

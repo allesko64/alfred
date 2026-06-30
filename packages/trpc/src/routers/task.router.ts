@@ -104,6 +104,27 @@ export const taskRouter = createTRPCRouter({
   approvePlan: workspaceProcedure
     .input(approveTaskPlanSchema.extend({ workspaceId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      const [existing] = await ctx.db
+        .select({ status: features.status })
+        .from(features)
+        .where(and(eq(features.id, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
+        .limit(1);
+
+      if (!existing) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      // Plan approval only makes sense once, straight out of PLANNING — accepting
+      // it from any status (e.g. a stale "Approve Plan" button still on screen
+      // after the feature moved on) would regress further-along features like
+      // REVIEW_PASSED back down to IN_DEVELOPMENT.
+      if (existing.status !== "PLANNING") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This feature's task plan has already been approved",
+        });
+      }
+
       const [feature] = await ctx.db
         .update(features)
         .set({ status: "IN_DEVELOPMENT", updatedAt: new Date() })

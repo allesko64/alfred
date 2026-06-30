@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -13,12 +13,20 @@ import {
 } from "@phosphor-icons/react"
 
 import { useTRPC } from "@/lib/trpc/client"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { StatusBadge } from "@/components/workspace/dashboard/status-dot"
 import { AlfredAvatar } from "@/components/workspace/conversation"
+import { Button as StatefulButton } from "@/components/ui/stateful-button"
+import { useSetFeatureHeaderAction } from "@/components/workspace/feature-detail/feature-header-actions"
+import {
+  IssueCard,
+  IssueGroupHeader,
+  EmptyIssueState,
+  type Review,
+} from "@/components/workspace/feature-detail/review-issue-card"
 import {
   Select,
   SelectContent,
@@ -36,68 +44,6 @@ const PRE_DEVELOPMENT_STATUSES = new Set([
   "PLANNING",
 ])
 
-type ReviewIssue = {
-  id: string
-  title: string
-  description: string | null
-  severity: "BLOCKING" | "NON_BLOCKING"
-  filePath: string | null
-  lineNumber: number | null
-  prdRequirementViolated: string | null
-  suggestedFix: string | null
-  carriedOverFromReviewNumber: number | null
-}
-
-type Review = {
-  id: string
-  reviewNumber: number
-  status: string
-  summary: string | null
-  blockingCount: number
-  nonBlockingCount: number
-  isLargePR: boolean
-  isArchived: boolean
-  resolvedFromPrevious: unknown
-  criteriaCoverage: unknown
-  createdAt: Date
-  issues: ReviewIssue[]
-}
-
-function IssueCard({ issue }: { issue: ReviewIssue }) {
-  const isBlocking = issue.severity === "BLOCKING"
-  return (
-    <div
-      className={
-        isBlocking
-          ? "flex flex-col gap-1 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3"
-          : "flex flex-col gap-1 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3"
-      }
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className={isBlocking ? "text-sm font-medium text-destructive" : "text-sm font-medium text-warning"}>
-          {issue.title}
-        </span>
-        {issue.carriedOverFromReviewNumber && (
-          <Badge variant="outline" className="shrink-0 text-[10px]">
-            Previously flagged in Review #{issue.carriedOverFromReviewNumber} — still present
-          </Badge>
-        )}
-      </div>
-      {issue.description && <span className="text-sm text-muted-foreground">{issue.description}</span>}
-      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-muted-foreground">
-        {issue.filePath && (
-          <span>
-            <code>{issue.filePath}</code>
-            {issue.lineNumber ? ` line ${issue.lineNumber}` : ""}
-          </span>
-        )}
-        {issue.prdRequirementViolated && <span>Requirement: {issue.prdRequirementViolated}</span>}
-        {issue.suggestedFix && <span>Fix: {issue.suggestedFix}</span>}
-      </div>
-    </div>
-  )
-}
-
 function ReviewResults({
   review,
   workspaceId,
@@ -109,7 +55,6 @@ function ReviewResults({
 }) {
   const trpc = useTRPC()
   const queryClient = useQueryClient()
-  const router = useRouter()
 
   const requestReviewNow = useMutation(
     trpc.github.requestReviewNow.mutationOptions({
@@ -128,73 +73,75 @@ function ReviewResults({
   const canShip = review.blockingCount === 0
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-foreground">Review #{review.reviewNumber}</span>
-          {review.isLargePR && (
-            <Badge variant="outline" className="text-muted-foreground">
-              Large PR detected — Alfred focused on the most relevant sections
+    <div className="flex flex-col">
+      {/* Level 2 — Review Summary Block */}
+      <div className="flex w-full flex-col gap-3 rounded-xl border border-border bg-card px-5 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-base font-semibold text-foreground">Review #{review.reviewNumber}</span>
+          <div className="flex shrink-0 items-center gap-2">
+            <Badge variant={canShip ? "success" : "destructive"} className="text-base">
+              {canShip ? "Review Passed" : "Changes Requested"}
             </Badge>
+            {!canShip && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={requestReviewNow.isPending}
+                onClick={() => requestReviewNow.mutate({ workspaceId, featureId })}
+              >
+                {requestReviewNow.isPending && <SpinnerIcon className="size-3.5 animate-spin" />}
+                Request Re-review
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {review.isLargePR && (
+          <Badge variant="outline" className="w-fit text-base text-muted-foreground">
+            Large PR detected — Alfred focused on the most relevant sections
+          </Badge>
+        )}
+
+        {resolvedFromPrevious.length > 0 && (
+          <div className="flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 px-4 py-3">
+            <CheckCircleIcon weight="fill" className="mt-0.5 size-4 shrink-0 text-success" />
+            <span className="text-base text-success">
+              {resolvedFromPrevious.length} issue{resolvedFromPrevious.length > 1 ? "s" : ""} resolved since the
+              previous review
+            </span>
+          </div>
+        )}
+
+        {review.summary && <p className="w-full text-base leading-relaxed text-foreground">{review.summary}</p>}
+      </div>
+
+      {/* Level 3 — Blocking & Non-Blocking Issues, side by side for symmetry */}
+      <div className="mt-8 grid grid-cols-2 gap-6">
+        <div className="flex flex-col gap-2">
+          <IssueGroupHeader label="Blocking Issues" count={blockingIssues.length} tone="destructive" />
+          {blockingIssues.length === 0 ? (
+            <EmptyIssueState label="No blocking issues found" />
+          ) : (
+            <div className="flex flex-col gap-2">
+              {blockingIssues.map((issue) => <IssueCard key={issue.id} issue={issue} />)}
+            </div>
           )}
         </div>
-        {canShip ? (
-          <Button
-            size="sm"
-            onClick={() => router.push(`/workspace/${workspaceId}/features/${featureId}/approval`)}
-          >
-            <RocketLaunchIcon />
-            Approve &amp; Ship
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={requestReviewNow.isPending}
-            onClick={() => requestReviewNow.mutate({ workspaceId, featureId })}
-          >
-            {requestReviewNow.isPending && <SpinnerIcon className="size-3.5 animate-spin" />}
-            Request Re-review
-          </Button>
-        )}
-      </div>
 
-      {resolvedFromPrevious.length > 0 && (
-        <div className="flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 px-4 py-3">
-          <CheckCircleIcon weight="fill" className="mt-0.5 size-4 shrink-0 text-success" />
-          <span className="text-sm text-success">
-            {resolvedFromPrevious.length} issue{resolvedFromPrevious.length > 1 ? "s" : ""} resolved since the
-            previous review
-          </span>
+        <div className="flex flex-col gap-2">
+          <IssueGroupHeader label="Non-Blocking Issues" count={nonBlockingIssues.length} tone="warning" />
+          {nonBlockingIssues.length === 0 ? (
+            <EmptyIssueState label="No non-blocking issues found" />
+          ) : (
+            <div className="flex flex-col gap-2">
+              {nonBlockingIssues.map((issue) => <IssueCard key={issue.id} issue={issue} />)}
+            </div>
+          )}
         </div>
-      )}
-
-      {review.summary && <p className="text-lg text-foreground">{review.summary}</p>}
-
-      <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium text-destructive">
-          🔴 Blocking Issues ({blockingIssues.length})
-        </span>
-        {blockingIssues.length === 0 ? (
-          <span className="text-sm text-muted-foreground">No blocking issues found ✅</span>
-        ) : (
-          blockingIssues.map((issue) => <IssueCard key={issue.id} issue={issue} />)
-        )}
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium text-warning">
-          🟡 Non-Blocking Issues ({nonBlockingIssues.length})
-        </span>
-        {nonBlockingIssues.length === 0 ? (
-          <span className="text-sm text-muted-foreground">No non-blocking issues found ✅</span>
-        ) : (
-          nonBlockingIssues.map((issue) => <IssueCard key={issue.id} issue={issue} />)
-        )}
       </div>
 
       {criteriaCoverage.length > 0 && (
-        <div className="flex flex-col gap-1.5 rounded-lg border border-border px-4 py-3">
+        <div className="mt-8 flex flex-col gap-1.5 rounded-lg border border-border px-4 py-3">
           <span className="text-sm font-medium text-foreground">Acceptance criteria coverage</span>
           {criteriaCoverage.map((ac) => (
             <div key={ac.label} className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -214,6 +161,7 @@ export function ReviewClient() {
   const { workspaceId, featureId } = useParams<{ workspaceId: string; featureId: string }>()
   const trpc = useTRPC()
   const queryClient = useQueryClient()
+  const router = useRouter()
   const [isLinking, setIsLinking] = useState(false)
   const [selectedPRId, setSelectedPRId] = useState<string | null>(null)
 
@@ -274,14 +222,41 @@ export function ReviewClient() {
     }),
   )
 
+  const workflowStatus = workflowStatusQuery.data
+  const isPending = workflowStatus?.status === "pending"
+  const reviews = (historyQuery.data?.reviews ?? []) as Review[]
+  const currentReviews = reviews.filter((r) => !r.isArchived)
+  const latestReview = currentReviews[0] ?? null
+  const isRunning = workflowStatus?.status === "running" || (!latestReview && workflowStatus?.status !== "failed")
+  const canShipLatest = !isPending && !isRunning && !!latestReview && latestReview.blockingCount === 0
+
+  useSetFeatureHeaderAction(
+    useMemo(() => {
+      if (!canShipLatest) return null
+
+      return (
+        <StatefulButton
+          className="px-4 py-1.5 text-sm"
+          onClick={() => router.push(`/workspace/${workspaceId}/features/${featureId}/approval`)}
+        >
+          <span className="flex items-center gap-1.5 whitespace-nowrap">
+            <RocketLaunchIcon className="size-4" />
+            Continue to Approval
+          </span>
+        </StatefulButton>
+      )
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [canShipLatest, workspaceId, featureId]),
+  )
+
   if (featureQuery.isLoading || linkedPRQuery.isLoading) {
-    return <div className="max-w-[700px] py-16" />
+    return <div className="w-full py-16" />
   }
 
   // State 1 — feature isn't in development yet, so there's nothing to review.
   if (isPreDevelopment) {
     return (
-      <div className="flex max-w-[700px] flex-col items-center gap-1 py-16 text-center">
+      <div className="flex w-full flex-col items-center gap-1 py-16 text-center">
         <span className="text-sm font-medium text-muted-foreground">Review</span>
         <span className="text-sm text-muted-foreground/70">
           Complete your tasks first before linking a PR for review
@@ -295,7 +270,7 @@ export function ReviewClient() {
   // State 2 — in development, nothing linked yet.
   if (!pr) {
     return (
-      <div className="flex max-w-[700px] flex-col items-center gap-4 py-16 text-center">
+      <div className="flex w-full flex-col items-center gap-4 py-16 text-center">
         <AlfredAvatar />
         <span className="text-sm font-medium text-foreground">Link a pull request to start the AI review</span>
 
@@ -334,19 +309,13 @@ export function ReviewClient() {
     )
   }
 
-  const workflowStatus = workflowStatusQuery.data
-  const isPending = workflowStatus?.status === "pending"
-  const reviews = (historyQuery.data?.reviews ?? []) as Review[]
-  const currentReviews = reviews.filter((r) => !r.isArchived)
-  const latestReview = currentReviews[0] ?? null
-  const isRunning = workflowStatus?.status === "running" || (!latestReview && workflowStatus?.status !== "failed")
-
   return (
-    <div className="flex max-w-[700px] flex-col gap-6 py-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-2 truncate">
+    <div className="flex w-full flex-col gap-8 py-6">
+      {/* Level 1 — PR Strip */}
+      <Card size="sm" className="w-full">
+        <CardContent className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="flex items-center gap-2 truncate text-sm font-medium text-foreground">
               <GitPullRequestIcon className="size-4 shrink-0 text-muted-foreground" />
               <a
                 href={pr.htmlUrl ?? "#"}
@@ -357,21 +326,21 @@ export function ReviewClient() {
                 #{pr.githubPrNumber} {pr.title}
               </a>
             </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="shrink-0 text-muted-foreground"
-              onClick={() => unlinkPullRequest.mutate({ workspaceId, pullRequestId: pr.id })}
-              disabled={unlinkPullRequest.isPending}
-            >
-              {unlinkPullRequest.isPending && <SpinnerIcon className="size-3.5 animate-spin" />}
-              Unlink PR
-            </Button>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">{pr.repositoryName}</span>
-          <StatusBadge status={pr.status} />
+            <span className="flex items-center gap-2 pl-6 text-xs text-muted-foreground">
+              {pr.repositoryName}
+              <StatusBadge status={pr.status} />
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0 text-muted-foreground"
+            onClick={() => unlinkPullRequest.mutate({ workspaceId, pullRequestId: pr.id })}
+            disabled={unlinkPullRequest.isPending}
+          >
+            {unlinkPullRequest.isPending && <SpinnerIcon className="size-3.5 animate-spin" />}
+            Unlink PR
+          </Button>
         </CardContent>
       </Card>
 

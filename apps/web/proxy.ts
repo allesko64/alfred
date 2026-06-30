@@ -4,7 +4,7 @@ import { getSessionCookie } from "better-auth/cookies"
 const PROTECTED_PREFIXES = ["/dashboard", "/workspace", "/onboarding"]
 const AUTH_PAGES = ["/login", "/signup"]
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const hasSession = !!getSessionCookie(request)
 

@@ -1,4 +1,5 @@
 export { appRouter, type AppRouter } from "./root";
+export { getOpenApiDocument } from "./openapi";
 export { createContext, type Context, type AuthSession } from "./context";
 export {
   createTRPCRouter,

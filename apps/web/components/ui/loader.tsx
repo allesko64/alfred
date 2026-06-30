@@ -2,6 +2,39 @@
 
 import { motion } from "motion/react"
 
+export function LoaderOne() {
+  const transition = (x: number) => ({
+    duration: 1,
+    repeat: Infinity,
+    repeatType: "loop" as const,
+    delay: x * 0.2,
+    ease: "easeInOut" as const,
+  })
+
+  return (
+    <div className="flex items-center gap-2">
+      <motion.div
+        initial={{ y: 0 }}
+        animate={{ y: [0, 10, 0] }}
+        transition={transition(0)}
+        className="size-4 rounded-full bg-foreground"
+      />
+      <motion.div
+        initial={{ y: 0 }}
+        animate={{ y: [0, 10, 0] }}
+        transition={transition(0.2)}
+        className="size-4 rounded-full bg-foreground"
+      />
+      <motion.div
+        initial={{ y: 0 }}
+        animate={{ y: [0, 10, 0] }}
+        transition={transition(0.4)}
+        className="size-4 rounded-full bg-foreground"
+      />
+    </div>
+  )
+}
+
 export function LoaderFive({ text }: { text: string }) {
   return (
     <div className="relative">

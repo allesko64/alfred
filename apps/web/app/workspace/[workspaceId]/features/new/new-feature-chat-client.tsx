@@ -5,15 +5,21 @@ import { useParams, useRouter } from "next/navigation"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "framer-motion"
 import { ArrowLeftIcon } from "@phosphor-icons/react"
+import { toast } from "sonner"
 
 import { useTRPC } from "@/lib/trpc/client"
 import { formatRelativeTime } from "@/lib/utils"
 import { PlaceholdersAndVanishInput } from "@/components/ui/placeholders-and-vanish-input"
+import { AIChatShell } from "@/components/ui/ai-chat"
+import { LoaderOne } from "@/components/ui/loader"
 import { MessageBubble, ThinkingBubble } from "@/components/workspace/conversation"
 import type { ConversationMessage } from "@/components/workspace/conversation"
 
 const WELCOME_MESSAGE = "Hey, I'm Alfred. Tell me about the feature you want to build"
 const TRANSITION_MESSAGE = "I have everything I need, generating your PRD now..."
+// Safety net: if Alfred's background reply never lands (stuck/failed job), don't
+// leave the chat spinning forever — surface an error and let the user retry.
+const THINKING_TIMEOUT_MS = 45_000
 
 const INPUT_PLACEHOLDERS = [
   "Describe your feature...",
@@ -60,10 +66,13 @@ export function NewFeatureChatClient() {
 
   const dbMessages = messagesQuery.data ?? []
 
-  // Drop the optimistic bubble once the DB has caught up with it.
+  // Drop the optimistic bubble once the DB has caught up with it. Checks the
+  // whole list (not just the last entry) because polling can catch the user
+  // message and Alfred's reply together, landing the user message anywhere
+  // but last — checking only `last` left the optimistic bubble stuck forever,
+  // producing a visible duplicate once the real message also rendered.
   useEffect(() => {
-    const last = dbMessages[dbMessages.length - 1]
-    if (optimisticContent && last?.role === "user" && last.content === optimisticContent) {
+    if (optimisticContent && dbMessages.some((m) => m.role === "user" && m.content === optimisticContent)) {
       setOptimisticContent(null)
     }
   }, [dbMessages, optimisticContent])
@@ -76,6 +85,22 @@ export function NewFeatureChatClient() {
       setIsThinking(false)
     }
   }, [dbMessages, isThinking])
+
+  // If Alfred never replies (stuck/failed background job, credits ran out
+  // mid-flight, etc.) don't leave the input locked and the spinner running
+  // forever with no feedback — time out and let the user retry.
+  useEffect(() => {
+    if (!isThinking) return
+    const timeout = setTimeout(() => {
+      setIsThinking(false)
+      setOptimisticContent((content) => {
+        if (content) setInput(content)
+        return null
+      })
+      toast.error("Alfred is taking longer than expected to reply. Please try again.")
+    }, THINKING_TIMEOUT_MS)
+    return () => clearTimeout(timeout)
+  }, [isThinking])
 
   // Clarification wrapped up — show the hand-off message, then redirect.
   useEffect(() => {
@@ -106,15 +131,21 @@ export function NewFeatureChatClient() {
     if (optimisticContent) {
       list.push({ id: "optimistic", role: "user", content: optimisticContent })
     }
-    if (isTransitioning) {
-      list.push({ id: "transition", role: "alfred", content: TRANSITION_MESSAGE })
-    }
     return list
-  }, [dbMessages, optimisticContent, isTransitioning])
+  }, [dbMessages, optimisticContent])
 
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
   }, [messages.length, isThinking])
+
+  function handleSubmitError(content: string, error: unknown) {
+    setIsThinking(false)
+    setOptimisticContent(null)
+    // Hand the text back so the user doesn't lose what they typed and can retry.
+    setInput(content)
+    const message = error instanceof Error ? error.message : "Something went wrong. Please try again."
+    toast.error(message)
+  }
 
   function submitMessage(content: string) {
     if (!content || isThinking || isTransitioning) return
@@ -127,10 +158,16 @@ export function NewFeatureChatClient() {
     if (!featureId) {
       createFeature.mutate(
         { workspaceId, content },
-        { onSuccess: (feature) => setFeatureId(feature.id) },
+        {
+          onSuccess: (feature) => setFeatureId(feature.id),
+          onError: (error) => handleSubmitError(content, error),
+        },
       )
     } else {
-      submitReply.mutate({ workspaceId, featureId, content })
+      submitReply.mutate(
+        { workspaceId, featureId, content },
+        { onError: (error) => handleSubmitError(content, error) },
+      )
     }
   }
 
@@ -143,12 +180,8 @@ export function NewFeatureChatClient() {
   const lastMessageId = messages[messages.length - 1]?.id
 
   return (
-    <motion.div
-      animate={isTransitioning ? { opacity: 0 } : { opacity: 1 }}
-      transition={{ duration: 0.6, delay: isTransitioning ? 1 : 0 }}
-      className="flex min-h-screen flex-col bg-background"
-    >
-      <div className="flex h-14 shrink-0 items-center gap-3 px-6">
+    <div className="flex h-dvh flex-col items-center gap-4 overflow-hidden bg-background px-6 py-6">
+      <div className="flex h-8 w-full max-w-[700px] shrink-0 items-center gap-3">
         <button
           type="button"
           onClick={() => router.push(`/workspace/${workspaceId}/features`)}
@@ -159,11 +192,22 @@ export function NewFeatureChatClient() {
         <span className="text-sm font-medium text-muted-foreground">New Feature</span>
       </div>
 
-      <div className="flex flex-1 flex-col items-center overflow-y-auto px-6">
-        {/* pt-[33vh] anchors Alfred's opening message roughly a third of the way down
-            on first load; it stays fixed as more messages stack below and the
-            container starts scrolling once content overflows. */}
-        <div className="flex w-full max-w-[700px] flex-col gap-2 pt-[33vh] pb-10">
+      <AIChatShell
+        title="Alfred — New Feature"
+        className="flex w-full max-w-[700px] flex-1"
+        footer={
+          !isTransitioning && (
+            <PlaceholdersAndVanishInput
+              placeholders={INPUT_PLACEHOLDERS}
+              disabled={isBusy}
+              isThinking={isThinking}
+              onChange={(e) => setInput(e.target.value)}
+              onSubmit={handleSubmit}
+            />
+          )
+        }
+      >
+        <div className="flex w-full flex-col gap-2 pb-4">
           <AnimatePresence initial={false}>
             {messages.map((message, index) => {
               const previous = messages[index - 1]
@@ -174,7 +218,7 @@ export function NewFeatureChatClient() {
               return (
                 <div key={message.id} className={isNewExchange ? "pt-6" : undefined}>
                   {isNewExchange && (
-                    <div className="pb-2 text-center text-[11px] text-muted-foreground/60">
+                    <div className="pb-2 text-center text-[11px] text-white/40">
                       {message.createdAt ? formatRelativeTime(message.createdAt) : "Just now"}
                     </div>
                   )}
@@ -191,21 +235,24 @@ export function NewFeatureChatClient() {
           {isThinking && !isTransitioning && <ThinkingBubble />}
           <div ref={scrollAnchorRef} />
         </div>
-      </div>
+      </AIChatShell>
 
-      {!isTransitioning && (
-        <div className="flex flex-col items-center gap-2 px-6 pt-12 pb-6">
-          <div className="w-full max-w-[700px]">
-            <PlaceholdersAndVanishInput
-              placeholders={INPUT_PLACEHOLDERS}
-              disabled={isBusy}
-              isThinking={isThinking}
-              onChange={(e) => setInput(e.target.value)}
-              onSubmit={handleSubmit}
-            />
-          </div>
-        </div>
-      )}
-    </motion.div>
+      <AnimatePresence>
+        {isTransitioning && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm"
+          >
+            <div className="flex w-72 flex-col items-center gap-4 rounded-xl border border-border bg-card px-8 py-8 text-center shadow-2xl">
+              <LoaderOne />
+              <span className="text-sm font-medium text-foreground">{TRANSITION_MESSAGE}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }

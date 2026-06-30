@@ -11,7 +11,7 @@ export function AlfredAvatar({ pulse, icon: IconComponent }: { pulse?: boolean; 
         render={
           <div
             className={cn(
-              "flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground",
+              "flex size-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-white",
               IconComponent && "size-8",
               pulse && "bg-primary text-primary-foreground animate-pulse",
             )}

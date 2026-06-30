@@ -21,7 +21,9 @@
     "lru-cache": "^11.5.1",
     "razorpay": "^2.9.6",
     "superjson": "^2.2.6",
-    "zod": "^3.25.76"
+    "trpc-to-openapi": "^2.4.0",
+    "zod": "^3.25.76",
+    "zod-openapi": "4.2.4"
   },
   "devDependencies": {
     "@types/node": "^22.15.3"

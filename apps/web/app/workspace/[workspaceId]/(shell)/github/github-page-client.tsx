@@ -121,7 +121,11 @@ export function GithubPageClient() {
               <div className="flex items-center gap-2">
                 <Select value={selectedGithubRepoId} onValueChange={setSelectedGithubRepoId}>
                   <SelectTrigger className="w-full max-w-sm">
-                    <SelectValue placeholder="Choose a repository" />
+                    <SelectValue placeholder="Choose a repository">
+                      {(value: string | null) =>
+                        installationReposQuery.data?.find((repo) => String(repo.githubRepoId) === value)
+                          ?.fullName ?? "Choose a repository"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {installationReposQuery.data?.map((repo) => (

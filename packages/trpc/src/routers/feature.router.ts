@@ -20,23 +20,94 @@ import {
   workflowRuns,
 } from "@alfred/db";
 import { inngest } from "@alfred/inngest";
-import { createTRPCRouter, requireWorkspaceRole, workspaceInputSchema, workspaceProcedure } from "../trpc";
+import {
+  createTRPCRouter,
+  requireWorkspaceRole,
+  workspaceInputSchema,
+  workspaceProcedure,
+} from "../trpc";
 
 const APPROVER_ROLES = ["owner", "admin", "reviewer"] as const;
 
+// Every feature_status enum value (packages/db/src/schema/enums.ts) must appear
+// in exactly one stage below — a status left out here means a feature in that
+// status has zero count in any stage, and clicking through a stage's link
+// (which filters /features by these statuses) makes it appear to vanish.
+// Stages mirror the feature-detail floating dock's segments (Conversation,
+// PRD, Tasks, Review, Approval) so the pipeline doesn't surface more phases
+// than a feature actually has tabs for.
 const PIPELINE_STAGES = [
-  { key: "draft", label: "Draft", statuses: ["DRAFT"] },
-  { key: "clarifying", label: "Clarifying", statuses: ["CLARIFYING"] },
-  { key: "prd_ready", label: "PRD Ready", statuses: ["PRD_READY"] },
-  { key: "in_development", label: "In Development", statuses: ["IN_DEVELOPMENT"] },
-  { key: "in_review", label: "In Review", statuses: ["REVIEWING", "RE_REVIEWING"] },
-  { key: "shipped", label: "Shipped", statuses: ["SHIPPED"] },
+  {
+    key: "conversation",
+    label: "Conversation",
+    statuses: ["DRAFT", "CLARIFYING"],
+  },
+  { key: "prd", label: "PRD", statuses: ["PRD_GENERATION", "PRD_READY"] },
+  {
+    key: "tasks",
+    label: "Tasks",
+    statuses: ["TASK_GENERATION", "PLANNING", "IN_DEVELOPMENT", "PR_LINKED"],
+  },
+  {
+    key: "review",
+    label: "Review",
+    statuses: [
+      "REVIEWING",
+      "CHANGES_REQUESTED",
+      "RE_REVIEWING",
+      "REVIEW_PASSED",
+    ],
+  },
+  {
+    key: "approval",
+    label: "Approval",
+    statuses: ["PENDING_APPROVAL", "APPROVED", "SHIPPED", "REJECTED"],
+  },
 ] as const;
+
+const featureOutputSchema = z.object({
+  id: z.string().uuid(),
+  workspaceId: z.string().uuid(),
+  projectId: z.string().uuid().nullable(),
+  title: z.string(),
+  originalRequest: z.string(),
+  status: z.enum([
+    "DRAFT",
+    "CLARIFYING",
+    "PRD_GENERATION",
+    "PRD_READY",
+    "TASK_GENERATION",
+    "PLANNING",
+    "IN_DEVELOPMENT",
+    "PR_LINKED",
+    "REVIEWING",
+    "CHANGES_REQUESTED",
+    "RE_REVIEWING",
+    "REVIEW_PASSED",
+    "PENDING_APPROVAL",
+    "APPROVED",
+    "SHIPPED",
+    "REJECTED",
+  ]),
+  createdBy: z.string().uuid(),
+  assignedTo: z.string().uuid().nullable(),
+  approvedBy: z.string().uuid().nullable(),
+  approvedAt: z.date().nullable(),
+  shippedAt: z.date().nullable(),
+  rejectedAt: z.date().nullable(),
+  rejectionReason: z.string().nullable(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
 
 export const featureRouter = createTRPCRouter({
   /** Feature creation is always free (never gated) — only the AI clarification round it kicks off costs a credit. */
   create: workspaceProcedure
+    .meta({
+      openapi: { method: "POST", path: "/feature.create", tags: ["feature"] },
+    })
     .input(createFeatureSchema)
+    .output(featureOutputSchema)
     .mutation(async ({ ctx, input }) => {
       const [feature] = await ctx.db
         .insert(features)
@@ -60,7 +131,10 @@ export const featureRouter = createTRPCRouter({
         content: input.content,
       });
 
-      const credits = await checkAndDeductCredits(ctx.workspaceId, "clarification_message");
+      const credits = await checkAndDeductCredits(
+        ctx.workspaceId,
+        "clarification_message",
+      );
       if (credits.allowed) {
         await inngest.send({
           name: "feature/clarification.requested",
@@ -72,7 +146,8 @@ export const featureRouter = createTRPCRouter({
           workspaceId: ctx.workspaceId,
           type: "credits_exhausted",
           title: "Out of AI credits",
-          message: "This feature was created, but Alfred can't reply until your credits reset or you upgrade.",
+          message:
+            "This feature was created, but Alfred can't reply until your credits reset or you upgrade.",
           featureId: feature.id,
         });
       }
@@ -81,23 +156,34 @@ export const featureRouter = createTRPCRouter({
     }),
 
   submitClarificationReply: workspaceProcedure
-    .input(submitClarificationReplySchema.extend({ workspaceId: z.string().uuid() }))
+    .input(
+      submitClarificationReplySchema.extend({ workspaceId: z.string().uuid() }),
+    )
     .mutation(async ({ ctx, input }) => {
       const [feature] = await ctx.db
         .select({ id: features.id })
         .from(features)
-        .where(and(eq(features.id, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
+        .where(
+          and(
+            eq(features.id, input.featureId),
+            eq(features.workspaceId, ctx.workspaceId),
+          ),
+        )
         .limit(1);
 
       if (!feature) {
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
-      const credits = await checkAndDeductCredits(ctx.workspaceId, "clarification_message");
+      const credits = await checkAndDeductCredits(
+        ctx.workspaceId,
+        "clarification_message",
+      );
       if (!credits.allowed) {
         throw new TRPCError({
           code: "FORBIDDEN",
-          message: "You're out of AI credits. Upgrade or wait for your next monthly reset.",
+          message:
+            "You're out of AI credits. Upgrade or wait for your next monthly reset.",
         });
       }
 
@@ -116,12 +202,22 @@ export const featureRouter = createTRPCRouter({
     }),
 
   getClarificationMessages: workspaceProcedure
-    .input(z.object({ workspaceId: z.string().uuid(), featureId: z.string().uuid() }))
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        featureId: z.string().uuid(),
+      }),
+    )
     .query(async ({ ctx, input }) => {
       const [feature] = await ctx.db
         .select({ id: features.id })
         .from(features)
-        .where(and(eq(features.id, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
+        .where(
+          and(
+            eq(features.id, input.featureId),
+            eq(features.workspaceId, ctx.workspaceId),
+          ),
+        )
         .limit(1);
 
       if (!feature) {
@@ -136,12 +232,22 @@ export const featureRouter = createTRPCRouter({
     }),
 
   getWorkflowProgress: workspaceProcedure
-    .input(z.object({ workspaceId: z.string().uuid(), featureId: z.string().uuid() }))
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        featureId: z.string().uuid(),
+      }),
+    )
     .query(async ({ ctx, input }) => {
       const [feature] = await ctx.db
         .select({ id: features.id })
         .from(features)
-        .where(and(eq(features.id, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
+        .where(
+          and(
+            eq(features.id, input.featureId),
+            eq(features.workspaceId, ctx.workspaceId),
+          ),
+        )
         .limit(1);
 
       if (!feature) {
@@ -158,16 +264,27 @@ export const featureRouter = createTRPCRouter({
       return run ?? null;
     }),
 
-  list: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
-    return ctx.db
-      .select()
-      .from(features)
-      .where(eq(features.workspaceId, ctx.workspaceId))
-      .orderBy(desc(features.updatedAt));
-  }),
+  list: workspaceProcedure
+    .meta({
+      openapi: { method: "GET", path: "/feature.list", tags: ["feature"] },
+    })
+    .input(workspaceInputSchema)
+    .output(z.array(featureOutputSchema))
+    .query(async ({ ctx }) => {
+      return ctx.db
+        .select()
+        .from(features)
+        .where(eq(features.workspaceId, ctx.workspaceId))
+        .orderBy(desc(features.updatedAt));
+    }),
 
   getById: workspaceProcedure
-    .input(z.object({ workspaceId: z.string().uuid(), featureId: z.string().uuid() }))
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        featureId: z.string().uuid(),
+      }),
+    )
     .query(async ({ ctx, input }) => {
       const [row] = await ctx.db
         .select({
@@ -177,99 +294,155 @@ export const featureRouter = createTRPCRouter({
         })
         .from(features)
         .innerJoin(users, eq(users.id, features.createdBy))
-        .where(and(eq(features.id, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
+        .where(
+          and(
+            eq(features.id, input.featureId),
+            eq(features.workspaceId, ctx.workspaceId),
+          ),
+        )
         .limit(1);
 
       if (!row) {
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
-      return { ...row.feature, createdByName: row.createdByName, createdByEmail: row.createdByEmail };
+      return {
+        ...row.feature,
+        createdByName: row.createdByName,
+        createdByEmail: row.createdByEmail,
+      };
     }),
 
   delete: workspaceProcedure
-    .input(z.object({ workspaceId: z.string().uuid(), featureId: z.string().uuid() }))
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        featureId: z.string().uuid(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const [feature] = await ctx.db
         .select({ id: features.id })
         .from(features)
-        .where(and(eq(features.id, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
+        .where(
+          and(
+            eq(features.id, input.featureId),
+            eq(features.workspaceId, ctx.workspaceId),
+          ),
+        )
         .limit(1);
 
       if (!feature) {
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
-      await ctx.db.delete(workflowRuns).where(eq(workflowRuns.featureId, input.featureId));
-      await ctx.db.delete(aiReviews).where(eq(aiReviews.featureId, input.featureId));
-      await ctx.db.delete(pullRequests).where(eq(pullRequests.featureId, input.featureId));
-      await ctx.db.delete(notifications).where(eq(notifications.featureId, input.featureId));
+      await ctx.db
+        .delete(workflowRuns)
+        .where(eq(workflowRuns.featureId, input.featureId));
+      await ctx.db
+        .delete(aiReviews)
+        .where(eq(aiReviews.featureId, input.featureId));
+      await ctx.db
+        .delete(pullRequests)
+        .where(eq(pullRequests.featureId, input.featureId));
+      await ctx.db
+        .delete(notifications)
+        .where(eq(notifications.featureId, input.featureId));
       await ctx.db.delete(prds).where(eq(prds.featureId, input.featureId));
       await ctx.db.delete(features).where(eq(features.id, input.featureId));
 
       return { ok: true };
     }),
 
-  getStatusCounts: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
-    return ctx.db
-      .select({ status: features.status, count: sql<number>`count(*)::int` })
-      .from(features)
-      .where(eq(features.workspaceId, ctx.workspaceId))
-      .groupBy(features.status);
-  }),
+  getStatusCounts: workspaceProcedure
+    .input(workspaceInputSchema)
+    .query(async ({ ctx }) => {
+      return ctx.db
+        .select({ status: features.status, count: sql<number>`count(*)::int` })
+        .from(features)
+        .where(eq(features.workspaceId, ctx.workspaceId))
+        .groupBy(features.status);
+    }),
 
   /** The 6-stage pipeline shown on the dashboard (a curated view, not a 1:1 status dump). */
-  getPipelineCounts: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
-    const statusCounts = await ctx.db
-      .select({ status: features.status, count: sql<number>`count(*)::int` })
-      .from(features)
-      .where(eq(features.workspaceId, ctx.workspaceId))
-      .groupBy(features.status);
+  getPipelineCounts: workspaceProcedure
+    .input(workspaceInputSchema)
+    .query(async ({ ctx }) => {
+      const statusCounts = await ctx.db
+        .select({ status: features.status, count: sql<number>`count(*)::int` })
+        .from(features)
+        .where(eq(features.workspaceId, ctx.workspaceId))
+        .groupBy(features.status);
 
-    return PIPELINE_STAGES.map((stage) => ({
-      key: stage.key,
-      label: stage.label,
-      statuses: stage.statuses,
-      count: statusCounts
-        .filter((row) => (stage.statuses as readonly string[]).includes(row.status))
-        .reduce((sum, row) => sum + row.count, 0),
-    }));
-  }),
+      return PIPELINE_STAGES.map((stage) => ({
+        key: stage.key,
+        label: stage.label,
+        statuses: stage.statuses,
+        count: statusCounts
+          .filter((row) =>
+            (stage.statuses as readonly string[]).includes(row.status),
+          )
+          .reduce((sum, row) => sum + row.count, 0),
+      }));
+    }),
 
-  getRecent: workspaceProcedure.input(workspaceInputSchema).query(async ({ ctx }) => {
-    return ctx.db
-      .select({
-        id: features.id,
-        title: features.title,
-        status: features.status,
-        updatedAt: features.updatedAt,
-        createdByName: users.name,
-        createdByEmail: users.email,
-      })
-      .from(features)
-      .innerJoin(users, eq(users.id, features.createdBy))
-      .where(eq(features.workspaceId, ctx.workspaceId))
-      .orderBy(desc(features.updatedAt))
-      .limit(5);
-  }),
+  getRecent: workspaceProcedure
+    .input(workspaceInputSchema)
+    .query(async ({ ctx }) => {
+      return ctx.db
+        .select({
+          id: features.id,
+          title: features.title,
+          status: features.status,
+          updatedAt: features.updatedAt,
+          createdByName: users.name,
+          createdByEmail: users.email,
+        })
+        .from(features)
+        .innerJoin(users, eq(users.id, features.createdBy))
+        .where(eq(features.workspaceId, ctx.workspaceId))
+        .orderBy(desc(features.updatedAt))
+        .limit(5);
+    }),
 
   /** Everything the Approval tab needs in one call: PRD, task completion, linked PR, latest review, and the release-readiness check's own progress row. */
   getApprovalDetails: workspaceProcedure
-    .input(z.object({ workspaceId: z.string().uuid(), featureId: z.string().uuid() }))
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        featureId: z.string().uuid(),
+      }),
+    )
     .query(async ({ ctx, input }) => {
       const [row] = await ctx.db
-        .select({ feature: features, createdByName: users.name, createdByEmail: users.email })
+        .select({
+          feature: features,
+          createdByName: users.name,
+          createdByEmail: users.email,
+        })
         .from(features)
         .innerJoin(users, eq(users.id, features.createdBy))
-        .where(and(eq(features.id, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
+        .where(
+          and(
+            eq(features.id, input.featureId),
+            eq(features.workspaceId, ctx.workspaceId),
+          ),
+        )
         .limit(1);
 
       if (!row) {
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
-      const [prd] = await ctx.db.select().from(prds).where(eq(prds.featureId, input.featureId)).limit(1);
-      const taskRows = await ctx.db.select().from(tasks).where(eq(tasks.featureId, input.featureId));
+      const [prd] = await ctx.db
+        .select()
+        .from(prds)
+        .where(eq(prds.featureId, input.featureId))
+        .limit(1);
+      const taskRows = await ctx.db
+        .select()
+        .from(tasks)
+        .where(eq(tasks.featureId, input.featureId));
 
       const [pr] = await ctx.db
         .select({
@@ -286,7 +459,12 @@ export const featureRouter = createTRPCRouter({
       const [latestReview] = await ctx.db
         .select()
         .from(aiReviews)
-        .where(and(eq(aiReviews.featureId, input.featureId), eq(aiReviews.isArchived, false)))
+        .where(
+          and(
+            eq(aiReviews.featureId, input.featureId),
+            eq(aiReviews.isArchived, false),
+          ),
+        )
         .orderBy(desc(aiReviews.reviewNumber))
         .limit(1);
 
@@ -294,7 +472,10 @@ export const featureRouter = createTRPCRouter({
         .select()
         .from(workflowRuns)
         .where(
-          and(eq(workflowRuns.featureId, input.featureId), eq(workflowRuns.workflowType, "release_readiness")),
+          and(
+            eq(workflowRuns.featureId, input.featureId),
+            eq(workflowRuns.workflowType, "release_readiness"),
+          ),
         )
         .orderBy(desc(workflowRuns.createdAt))
         .limit(1);
@@ -314,12 +495,22 @@ export const featureRouter = createTRPCRouter({
 
   /** Manual fallback for the readiness check — e.g. a task got marked DONE after the automatic check already ran and failed. */
   requestReleaseReadinessCheck: workspaceProcedure
-    .input(z.object({ workspaceId: z.string().uuid(), featureId: z.string().uuid() }))
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        featureId: z.string().uuid(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const [feature] = await ctx.db
         .select({ id: features.id })
         .from(features)
-        .where(and(eq(features.id, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
+        .where(
+          and(
+            eq(features.id, input.featureId),
+            eq(features.workspaceId, ctx.workspaceId),
+          ),
+        )
         .limit(1);
 
       if (!feature) {
@@ -342,7 +533,12 @@ export const featureRouter = createTRPCRouter({
       const [feature] = await ctx.db
         .select()
         .from(features)
-        .where(and(eq(features.id, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
+        .where(
+          and(
+            eq(features.id, input.featureId),
+            eq(features.workspaceId, ctx.workspaceId),
+          ),
+        )
         .limit(1);
 
       if (!feature) {
@@ -350,7 +546,10 @@ export const featureRouter = createTRPCRouter({
       }
 
       if (feature.status !== "PENDING_APPROVAL") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Feature is not pending approval" });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Feature is not pending approval",
+        });
       }
 
       if (!ctx.user) {
@@ -395,7 +594,12 @@ export const featureRouter = createTRPCRouter({
       const [feature] = await ctx.db
         .select()
         .from(features)
-        .where(and(eq(features.id, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
+        .where(
+          and(
+            eq(features.id, input.featureId),
+            eq(features.workspaceId, ctx.workspaceId),
+          ),
+        )
         .limit(1);
 
       if (!feature) {
@@ -403,7 +607,10 @@ export const featureRouter = createTRPCRouter({
       }
 
       if (feature.status !== "PENDING_APPROVAL") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Feature is not pending approval" });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Feature is not pending approval",
+        });
       }
 
       const [rejected] = await ctx.db

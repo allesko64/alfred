@@ -134,10 +134,11 @@ export function Hero() {
         </div>
 
         <motion.div
+          id="how-it-works"
           initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.7, duration: 0.6, ease: "easeOut" }}
-          className="relative w-full max-w-5xl mx-auto mt-16"
+          className="relative w-full max-w-5xl mx-auto mt-16 scroll-mt-24"
         >
           <div
             className="absolute inset-0 pointer-events-none -z-10"

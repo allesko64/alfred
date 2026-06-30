@@ -1,13 +1,17 @@
 import { getPullRequestWithDiff } from "@alfred/ai";
 import { db, features, notifications, pullRequests, repositories, workspaces } from "@alfred/db";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import type { InngestFunction } from "inngest";
 import { inngest } from "../client";
 import { reportWorkflowProgress } from "../workflow-runs";
 
 const RE_REVIEW_DEBOUNCE_MS = 5 * 60 * 1000;
 
-const BRANCH_PATTERN = /^alfred\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+// Branches are suggested as `<repo-slug>/<title-slug>-<shortId>` (see
+// BranchNameBanner), where shortId is the feature's UUID with dashes
+// stripped, truncated to 8 chars. We match on that trailing id and confirm
+// uniqueness against the workspace's features before linking.
+const BRANCH_PATTERN = /-([0-9a-f]{8})$/i;
 
 const _prIngestionWorkflow = inngest.createFunction(
   { id: "github-pr-ingestion", triggers: { event: "github/pr-ingestion.requested" } },
@@ -115,14 +119,20 @@ const _prIngestionWorkflow = inngest.createFunction(
       const match = BRANCH_PATTERN.exec(prDetails.headBranch);
       if (!match) return null;
 
-      const candidateFeatureId = match[1]!;
-      const [feature] = await db
+      const shortId = match[1]!.toLowerCase();
+      const candidates = await db
         .select()
         .from(features)
-        .where(and(eq(features.id, candidateFeatureId), eq(features.workspaceId, repository.workspaceId)))
-        .limit(1);
+        .where(
+          and(
+            eq(features.workspaceId, repository.workspaceId),
+            sql`replace(${features.id}::text, '-', '') ILIKE ${shortId + "%"}`,
+          ),
+        );
 
-      if (!feature) return null;
+      // Ambiguous (or no) match — skip silently rather than risk linking the wrong feature.
+      if (candidates.length !== 1) return null;
+      const feature = candidates[0]!;
 
       const [existingLink] = await db
         .select({ id: pullRequests.id })

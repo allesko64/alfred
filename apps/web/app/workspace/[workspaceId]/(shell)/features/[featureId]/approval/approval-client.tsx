@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import confetti from "canvas-confetti"
 import {
+  CaretRightIcon,
   CheckCircleIcon,
   CircleIcon,
   GitPullRequestIcon,
@@ -17,12 +18,21 @@ import {
 } from "@phosphor-icons/react"
 
 import { useTRPC } from "@/lib/trpc/client"
+import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Button as StatefulButton } from "@/components/ui/stateful-button"
 import { Progress } from "@/components/ui/progress"
 import { Textarea } from "@/components/ui/textarea"
 import { StatusBadge } from "@/components/workspace/dashboard/status-dot"
 import { AlfredAvatar } from "@/components/workspace/conversation"
+import { useSetFeatureHeaderAction } from "@/components/workspace/feature-detail/feature-header-actions"
+import {
+  IssueCard,
+  IssueGroupHeader,
+  EmptyIssueState,
+  type Review,
+} from "@/components/workspace/feature-detail/review-issue-card"
 import {
   Dialog,
   DialogContent,
@@ -48,15 +58,38 @@ const PRE_REVIEW_STATUSES = new Set([
 
 const APPROVER_ROLES = new Set(["owner", "admin", "reviewer"])
 
-function ChecklistItem({ done, label }: { done: boolean; label: string }) {
+type ChecklistState = "done" | "blocking" | "pending"
+
+function ChecklistRow({
+  label,
+  state,
+  detail,
+}: {
+  label: string
+  state: ChecklistState
+  detail?: ReactNode
+}) {
   return (
-    <div className="flex items-center gap-2 text-sm">
-      {done ? (
-        <CheckCircleIcon weight="fill" className="size-4 shrink-0 text-success" />
-      ) : (
-        <CircleIcon className="size-4 shrink-0 text-muted-foreground" />
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2 text-sm">
+        {state === "done" && <CheckCircleIcon weight="fill" className="size-4 shrink-0 text-success" />}
+        {state === "blocking" && <WarningCircleIcon weight="fill" className="size-4 shrink-0 text-warning" />}
+        {state === "pending" && <CircleIcon className="size-4 shrink-0 text-muted-foreground/40" />}
+        <span
+          className={cn(
+            state === "blocking" && "font-medium text-foreground",
+            state === "done" && "text-foreground",
+            state === "pending" && "text-muted-foreground/50",
+          )}
+        >
+          {label}
+        </span>
+      </div>
+      {state === "blocking" && detail && (
+        <div className="ml-6 flex items-center justify-between gap-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2">
+          {detail}
+        </div>
       )}
-      <span className={done ? "text-foreground" : "text-muted-foreground"}>{label}</span>
     </div>
   )
 }
@@ -124,23 +157,55 @@ export function ApprovalClient() {
     }),
   )
 
+  const details = detailsQuery.data
+  const role = workspaceQuery.data?.role
+  const canApprove = !!role && APPROVER_ROLES.has(role)
+  const canShip = canApprove && details?.feature.status === "PENDING_APPROVAL"
+
+  useSetFeatureHeaderAction(
+    useMemo(() => {
+      if (!canShip) return null
+
+      return (
+        <div className="flex items-center gap-2">
+          <Button
+            className="rounded-full bg-destructive px-4 py-1.5 text-sm text-white ring-offset-2 transition duration-200 hover:bg-destructive hover:ring-2 hover:ring-destructive dark:ring-offset-black"
+            onClick={() => setIsRejecting(true)}
+          >
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
+              <XCircleIcon className="size-4" />
+              Reject
+            </span>
+          </Button>
+          <StatefulButton
+            className="px-4 py-1.5 text-sm"
+            onClick={() => approve.mutateAsync({ workspaceId, featureId })}
+          >
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
+              <RocketLaunchIcon className="size-4" />
+              Approve &amp; Ship
+            </span>
+          </StatefulButton>
+        </div>
+      )
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [canShip, workspaceId, featureId]),
+  )
+
   if (detailsQuery.isLoading) {
-    return <div className="max-w-[700px] py-16" />
+    return <div className="w-full py-16" />
   }
 
-  const details = detailsQuery.data
   if (!details) {
     return null
   }
 
   const { feature, prd, tasksTotal, tasksDone, pr, latestReview, readinessRun } = details
-  const role = workspaceQuery.data?.role
-  const canApprove = !!role && APPROVER_ROLES.has(role)
 
   // State 1 — nothing to approve yet.
   if (PRE_REVIEW_STATUSES.has(feature.status)) {
     return (
-      <div className="flex max-w-[700px] flex-col items-center gap-1 py-16 text-center">
+      <div className="flex w-full flex-col items-center gap-1 py-16 text-center">
         <span className="text-sm font-medium text-muted-foreground">Approval</span>
         <span className="text-sm text-muted-foreground/70">
           Opens once the AI review passes with no blocking issues
@@ -149,129 +214,95 @@ export function ApprovalClient() {
     )
   }
 
-  const checklist = [
-    { done: !!prd && !!feature.approvedAt, label: "PRD generated and approved" },
-    {
-      done: tasksTotal > 0 ? tasksDone === tasksTotal : true,
-      label: `All tasks completed (${tasksDone}/${tasksTotal})`,
-    },
-    { done: !!pr, label: "PR linked" },
-    { done: latestReview?.status === "PASSED", label: "AI review passed" },
-    { done: (latestReview?.blockingCount ?? 1) === 0, label: "No blocking issues" },
-    {
-      done: ["PENDING_APPROVAL", "APPROVED", "SHIPPED"].includes(feature.status),
-      label: "Release readiness check passed",
-    },
-  ]
-
   const isCheckingReadiness =
     feature.status === "REVIEW_PASSED" &&
     (!readinessRun || readinessRun.status === "running" || readinessRun.status === "pending")
   const readinessNotReady = feature.status === "REVIEW_PASSED" && readinessRun?.status === "completed"
 
+  const checklist: { key: string; label: string; done: boolean; reason?: ReactNode }[] = [
+    {
+      key: "prd",
+      label: "PRD generated and approved",
+      done: !!prd && !!feature.approvedAt,
+      reason: !prd ? "The PRD hasn't been generated yet." : "The PRD hasn't been approved yet.",
+    },
+    {
+      key: "tasks",
+      label: `All tasks completed (${tasksDone}/${tasksTotal})`,
+      done: tasksTotal > 0 ? tasksDone === tasksTotal : true,
+      reason: `${tasksTotal - tasksDone} task(s) are not marked DONE.`,
+    },
+    {
+      key: "pr",
+      label: "PR linked",
+      done: !!pr,
+      reason: "No pull request has been linked yet.",
+    },
+    {
+      key: "review",
+      label: "AI review passed",
+      done: latestReview?.status === "PASSED",
+      reason: latestReview ? "The latest AI review has not passed yet." : "The AI review hasn't run yet.",
+    },
+    {
+      key: "noBlocking",
+      label: "No blocking issues",
+      done: (latestReview?.blockingCount ?? 1) === 0,
+      reason: `${latestReview?.blockingCount ?? 0} blocking issue(s) must be resolved.`,
+    },
+    {
+      key: "readiness",
+      label: "Release readiness check passed",
+      done: ["PENDING_APPROVAL", "APPROVED", "SHIPPED"].includes(feature.status),
+      reason: isCheckingReadiness ? undefined : (readinessRun?.progressMessage ?? "Release readiness check hasn't passed yet."),
+    },
+  ]
+
+  const blockingIndex = checklist.findIndex((item) => !item.done)
+
   return (
-    <div className="flex max-w-[700px] flex-col gap-6 py-6">
+    <div className="flex w-full flex-col gap-6 py-6">
       <Card>
         <CardHeader>
           <CardTitle>Approval checklist</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          {checklist.map((item) => (
-            <ChecklistItem key={item.label} done={item.done} label={item.label} />
-          ))}
+        <CardContent className="flex flex-col gap-3">
+          {checklist.map((item, index) => {
+            const state: ChecklistState =
+              index < blockingIndex || blockingIndex === -1 ? "done" : index === blockingIndex ? "blocking" : "pending"
+
+            const detail =
+              state === "blocking" && item.key === "readiness" && isCheckingReadiness ? (
+                <div className="flex flex-1 items-center gap-3">
+                  <AlfredAvatar pulse />
+                  <div className="flex flex-1 flex-col gap-1.5">
+                    <span className="text-sm text-foreground">
+                      {readinessRun?.progressMessage ?? "Alfred is checking release readiness..."}
+                    </span>
+                    <Progress value={readinessRun?.progressPercent ?? 20} />
+                  </div>
+                </div>
+              ) : state === "blocking" && item.key === "readiness" && readinessNotReady ? (
+                <>
+                  <span className="text-sm text-muted-foreground">{item.reason}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={requestCheck.isPending}
+                    onClick={() => requestCheck.mutate({ workspaceId, featureId })}
+                  >
+                    {requestCheck.isPending && <SpinnerIcon className="size-3.5 animate-spin" />}
+                    Re-check
+                  </Button>
+                </>
+              ) : state === "blocking" ? (
+                <span className="text-sm text-muted-foreground">{item.reason}</span>
+              ) : undefined
+
+            return <ChecklistRow key={item.key} label={item.label} state={state} detail={detail} />
+          })}
         </CardContent>
       </Card>
-
-      {isCheckingReadiness && (
-        <div className="flex w-full items-center gap-4 rounded-lg bg-muted px-4 py-4">
-          <AlfredAvatar pulse />
-          <div className="flex flex-1 flex-col gap-2">
-            <span className="text-sm text-foreground">
-              {readinessRun?.progressMessage ?? "Alfred is checking release readiness..."}
-            </span>
-            <Progress value={readinessRun?.progressPercent ?? 20} />
-          </div>
-        </div>
-      )}
-
-      {readinessNotReady && (
-        <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 px-4 py-4">
-          <WarningCircleIcon className="mt-0.5 size-4 shrink-0 text-warning" />
-          <div className="flex flex-1 flex-col gap-1">
-            <span className="text-sm font-medium text-warning">Not ready for approval yet</span>
-            <span className="text-sm text-muted-foreground">{readinessRun?.progressMessage}</span>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={requestCheck.isPending}
-            onClick={() => requestCheck.mutate({ workspaceId, featureId })}
-          >
-            {requestCheck.isPending && <SpinnerIcon className="size-3.5 animate-spin" />}
-            Re-check
-          </Button>
-        </div>
-      )}
-
-      {prd?.problemStatement && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">PRD summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg text-muted-foreground">{prd.problemStatement}</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {pr && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <GitPullRequestIcon className="size-4 shrink-0 text-muted-foreground" />
-              <a href={pr.htmlUrl ?? "#"} target="_blank" rel="noopener noreferrer" className="truncate hover:underline">
-                #{pr.githubPrNumber} {pr.title}
-              </a>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <StatusBadge status={pr.status} />
-          </CardContent>
-        </Card>
-      )}
-
-      {(reviewHistoryQuery.data?.reviews.length ?? 0) > 0 && (
-        <details className="rounded-lg border border-border px-4 py-3">
-          <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
-            AI review history ({reviewHistoryQuery.data?.reviews.length})
-          </summary>
-          <div className="mt-3 flex flex-col gap-3">
-            {reviewHistoryQuery.data?.reviews.map((review) => (
-              <div key={review.id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="font-medium text-foreground">Review #{review.reviewNumber}</span>
-                <StatusBadge status={review.status} />
-                <span className="text-muted-foreground">
-                  {review.blockingCount} blocking · {review.nonBlockingCount} non-blocking
-                </span>
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
-
-      {feature.status === "PENDING_APPROVAL" && (
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="destructive" disabled={!canApprove} onClick={() => setIsRejecting(true)}>
-            <XCircleIcon />
-            Reject
-          </Button>
-          <Button disabled={!canApprove || approve.isPending} onClick={() => approve.mutate({ workspaceId, featureId })}>
-            {approve.isPending && <SpinnerIcon className="size-4 animate-spin" />}
-            <RocketLaunchIcon />
-            Approve &amp; Ship
-          </Button>
-        </div>
-      )}
 
       {feature.status === "SHIPPED" && (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-4 py-8 text-center">
@@ -293,6 +324,77 @@ export function ApprovalClient() {
         </div>
       )}
 
+      {prd?.problemStatement && (
+        <details className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3">
+          <summary className="cursor-pointer text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            PRD summary
+          </summary>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{prd.problemStatement}</p>
+        </details>
+      )}
+
+      {pr && (
+        <details className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3">
+          <summary className="flex cursor-pointer items-center justify-between gap-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            <span className="flex items-center gap-2 normal-case">
+              <GitPullRequestIcon className="size-3.5 shrink-0" />
+              Pull request
+            </span>
+            <StatusBadge status={pr.status} />
+          </summary>
+          <a
+            href={pr.htmlUrl ?? "#"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 block truncate text-sm text-foreground hover:underline"
+          >
+            #{pr.githubPrNumber} {pr.title}
+          </a>
+        </details>
+      )}
+
+      {(reviewHistoryQuery.data?.reviews.length ?? 0) > 0 && (
+        <details className="group rounded-lg border border-border/60 bg-muted/20">
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
+            <CaretRightIcon className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
+            AI review history ({reviewHistoryQuery.data?.reviews.length})
+          </summary>
+          <div className="flex flex-col gap-3 border-t border-border/60 px-4 py-3">
+            {(reviewHistoryQuery.data?.reviews as Review[] | undefined)?.map((review) => {
+              const blockingIssues = review.issues.filter((i) => i.severity === "BLOCKING")
+              const nonBlockingIssues = review.issues.filter((i) => i.severity === "NON_BLOCKING")
+              return (
+                <div key={review.id} className="flex flex-col gap-3 rounded-lg border border-border bg-card px-4 py-3.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-foreground">Review #{review.reviewNumber}</span>
+                    <StatusBadge status={review.status} />
+                  </div>
+                  {review.summary && <p className="text-sm leading-relaxed text-muted-foreground">{review.summary}</p>}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-2">
+                      <IssueGroupHeader label="Blocking" count={blockingIssues.length} tone="destructive" />
+                      {blockingIssues.length === 0 ? (
+                        <EmptyIssueState label="No blocking issues" />
+                      ) : (
+                        blockingIssues.map((issue) => <IssueCard key={issue.id} issue={issue} />)
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <IssueGroupHeader label="Non-blocking" count={nonBlockingIssues.length} tone="warning" />
+                      {nonBlockingIssues.length === 0 ? (
+                        <EmptyIssueState label="No non-blocking issues" />
+                      ) : (
+                        nonBlockingIssues.map((issue) => <IssueCard key={issue.id} issue={issue} />)
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </details>
+      )}
+
       <Dialog open={isRejecting} onOpenChange={setIsRejecting}>
         <DialogContent>
           <DialogHeader>
@@ -305,15 +407,25 @@ export function ApprovalClient() {
             placeholder="Reason for rejection..."
             rows={4}
           />
+          <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2.5">
+            <WarningCircleIcon weight="fill" className="mt-0.5 size-4 shrink-0 text-destructive" />
+            <span className="text-sm text-destructive">
+              This can&apos;t be undone. Once rejected, the feature is permanently recorded as{" "}
+              <span className="font-medium">Rejected</span> and there is no way to move it back to a previous stage
+              from here.
+            </span>
+          </div>
           <DialogFooter>
-            <Button
-              variant="destructive"
+            <StatefulButton
               disabled={!reason.trim() || reject.isPending}
-              onClick={() => reject.mutate({ workspaceId, featureId, reason })}
+              className={cn(
+                "bg-destructive px-4 py-2 hover:ring-destructive",
+                (!reason.trim() || reject.isPending) && "pointer-events-none opacity-50",
+              )}
+              onClick={() => reject.mutateAsync({ workspaceId, featureId, reason })}
             >
-              {reject.isPending && <SpinnerIcon className="size-4 animate-spin" />}
               Confirm rejection
-            </Button>
+            </StatefulButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

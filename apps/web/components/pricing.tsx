@@ -22,6 +22,7 @@ interface PricingProps {
   showToggle?: boolean
   currentPlanId?: string
   renderAction?: (plan: PricingPlan, isMonthly: boolean) => React.ReactNode
+  compact?: boolean
 }
 
 export function Pricing({
@@ -31,6 +32,7 @@ export function Pricing({
   showToggle = true,
   currentPlanId,
   renderAction,
+  compact = false,
 }: PricingProps) {
   const [isMonthly, setIsMonthly] = useState(true)
   const isDesktop = useMediaQuery("(min-width: 768px)")
@@ -60,14 +62,24 @@ export function Pricing({
   return (
     <div className="w-full">
       {(title || description) && (
-        <div className="text-center space-y-4 mb-12">
+        <div className={cn("text-center space-y-4 mb-12", compact && "space-y-1 mb-6")}>
           {title && (
-            <h2 className="text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl">
+            <h2
+              className={cn(
+                "text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl",
+                compact && "text-lg font-semibold sm:text-lg"
+              )}
+            >
               {title}
             </h2>
           )}
           {description && (
-            <p className="text-muted-foreground text-lg whitespace-pre-line">
+            <p
+              className={cn(
+                "text-muted-foreground text-lg whitespace-pre-line",
+                compact && "text-sm"
+              )}
+            >
               {description}
             </p>
           )}
