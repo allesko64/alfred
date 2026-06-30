@@ -64,7 +64,7 @@ export function NewFeatureChatClient() {
   const createFeature = useMutation(trpc.feature.create.mutationOptions())
   const submitReply = useMutation(trpc.feature.submitClarificationReply.mutationOptions())
 
-  const dbMessages = messagesQuery.data ?? []
+  const dbMessages = useMemo(() => messagesQuery.data ?? [], [messagesQuery.data])
 
   // Drop the optimistic bubble once the DB has caught up with it. Checks the
   // whole list (not just the last entry) because polling can catch the user

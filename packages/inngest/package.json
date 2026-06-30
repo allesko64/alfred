@@ -18,5 +18,8 @@
     "inngest": "^4.11.0",
     "resend": "^4.0.1",
     "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@alfred/eslint-config": "workspace:*"
   }
 }

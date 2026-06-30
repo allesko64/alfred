@@ -26,6 +26,7 @@
     "zod-openapi": "4.2.4"
   },
   "devDependencies": {
+    "@alfred/eslint-config": "workspace:*",
     "@types/node": "^22.15.3"
   }
 }

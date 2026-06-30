@@ -22,6 +22,7 @@
     "postgres": "^3.4.9"
   },
   "devDependencies": {
+    "@alfred/eslint-config": "workspace:*",
     "@types/node": "^22.15.3",
     "dotenv-cli": "^11.0.0",
     "drizzle-kit": "^0.31.10"

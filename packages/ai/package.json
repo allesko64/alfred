@@ -17,6 +17,7 @@
     "openai": "^4.77.0"
   },
   "devDependencies": {
+    "@alfred/eslint-config": "workspace:*",
     "@types/node": "^22.15.3"
   }
 }

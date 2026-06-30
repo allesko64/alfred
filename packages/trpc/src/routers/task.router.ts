@@ -87,7 +87,7 @@ export const taskRouter = createTRPCRouter({
   update: workspaceProcedure
     .input(updateTaskSchema.extend({ workspaceId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const { taskId, workspaceId, ...patch } = input;
+      const { taskId, workspaceId: _workspaceId, ...patch } = input;
 
       const [task] = await ctx.db
         .update(tasks)

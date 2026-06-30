@@ -19,6 +19,12 @@ export const config = [
     },
     rules: {
       "turbo/no-undeclared-env-vars": "warn",
+      // Allow an explicit `_`-prefixed name to mark a deliberately unused
+      // binding (e.g. destructuring a prop out of a spread on purpose).
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
     },
   },
   {

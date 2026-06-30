@@ -16,6 +16,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@alfred/eslint-config": "workspace:*",
     "@types/node": "^22.15.3"
   }
 }

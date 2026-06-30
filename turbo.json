@@ -1,6 +1,26 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
+  "globalEnv": [
+    "BETTER_AUTH_SECRET",
+    "BETTER_AUTH_URL",
+    "DATABASE_URL",
+    "GITHUB_CLIENT_ID",
+    "GITHUB_CLIENT_SECRET",
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "MAX_DIFF_LINES",
+    "NEXT_PUBLIC_BETTER_AUTH_URL",
+    "NEXT_RUNTIME",
+    "NODE_ENV",
+    "OPENAI_MODEL",
+    "RAZORPAY_WEBHOOK_SECRET",
+    "RELEASE_READINESS_REQUIRE_MERGED",
+    "RESEND_API_KEY",
+    "SENTRY_AUTH_TOKEN",
+    "UPSTASH_REDIS_TOKEN",
+    "UPSTASH_REDIS_URL"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

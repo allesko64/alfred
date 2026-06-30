@@ -30,7 +30,6 @@ const generatedTasksResultSchema = z.object({
   generated_by: z.string(),
 });
 
-type GeneratedTask = z.infer<typeof generatedTaskSchema>;
 type GeneratedTasksResult = z.infer<typeof generatedTasksResultSchema>;
 
 const guardrailErrorSchema = z.object({
