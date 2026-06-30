@@ -1,12 +1,12 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { z } from "zod";
+import { featureInputSchema } from "@alfred/validators";
 import { aiReviews, reviewIssues, workflowRuns } from "@alfred/db";
 import { createTRPCRouter, workspaceProcedure } from "../trpc";
 
 export const reviewRouter = createTRPCRouter({
   /** All review cycles for a feature, newest first, each with its own issues. Decision 4/5. */
   getByFeature: workspaceProcedure
-    .input(z.object({ workspaceId: z.string().uuid(), featureId: z.string().uuid() }))
+    .input(featureInputSchema)
     .query(async ({ ctx, input }) => {
       const reviews = await ctx.db
         .select()
@@ -40,7 +40,7 @@ export const reviewRouter = createTRPCRouter({
 
   /** Latest ai_review/re_review workflow run for a feature — drives the running/debounce-banner states. */
   getWorkflowStatus: workspaceProcedure
-    .input(z.object({ workspaceId: z.string().uuid(), featureId: z.string().uuid() }))
+    .input(featureInputSchema)
     .query(async ({ ctx, input }) => {
       const [run] = await ctx.db
         .select()

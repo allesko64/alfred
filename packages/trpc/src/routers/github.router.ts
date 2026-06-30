@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -25,6 +26,7 @@ import {
   workspaces,
 } from "@alfred/db";
 import {
+  getInstallationOctokit,
   getInstallationUrl,
   listInstallationRepositories,
   lookupGithubUser,
@@ -263,6 +265,7 @@ export const githubRouter = createTRPCRouter({
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "You've reached your plan's connected repo limit. Upgrade for more.",
+          cause: { billingLimit: true },
         });
       }
 
@@ -286,6 +289,33 @@ export const githubRouter = createTRPCRouter({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Workspace has no project" });
       }
 
+      // Register a GitHub webhook scoped to this repo so PR events are
+      // delivered without relying on a single global secret. Generated
+      // up front so it can be persisted alongside the repository row.
+      const webhookSecret = randomBytes(32).toString("hex");
+      const baseUrl = process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? "http://localhost:3000";
+      let webhookId: number | null = null;
+
+      try {
+        const octokit = await getInstallationOctokit(input.installationId);
+        const { data: webhook } = await octokit.repos.createWebhook({
+          owner: selectedRepo.owner,
+          repo: selectedRepo.name,
+          config: {
+            url: `${baseUrl}/api/webhooks/github`,
+            content_type: "json",
+            secret: webhookSecret,
+          },
+          events: ["pull_request"],
+        });
+        webhookId = webhook.id;
+      } catch (error) {
+        // Best-effort: the repo can still be connected without a live
+        // webhook (e.g. re-connecting an already-hooked repo). Logged so
+        // missing webhooks can be diagnosed, but doesn't block onboarding.
+        console.error("Failed to create GitHub webhook", error);
+      }
+
       const [repository] = await ctx.db
         .insert(repositories)
         .values({
@@ -297,10 +327,18 @@ export const githubRouter = createTRPCRouter({
           name: selectedRepo.name,
           defaultBranch: selectedRepo.defaultBranch,
           installationId: input.installationId,
+          webhookId,
+          webhookSecret,
         })
         .onConflictDoUpdate({
           target: repositories.githubRepoId,
-          set: { disconnectedAt: null, workspaceId: ctx.workspaceId, installationId: input.installationId },
+          set: {
+            disconnectedAt: null,
+            workspaceId: ctx.workspaceId,
+            installationId: input.installationId,
+            webhookId,
+            webhookSecret,
+          },
         })
         .returning();
 
@@ -325,7 +363,13 @@ export const githubRouter = createTRPCRouter({
     .input(repositoryActionSchema)
     .mutation(async ({ ctx, input }) => {
       const [repository] = await ctx.db
-        .select({ id: repositories.id })
+        .select({
+          id: repositories.id,
+          owner: repositories.owner,
+          name: repositories.name,
+          installationId: repositories.installationId,
+          webhookId: repositories.webhookId,
+        })
         .from(repositories)
         .where(and(eq(repositories.id, input.repositoryId), eq(repositories.workspaceId, ctx.workspaceId)))
         .limit(1);
@@ -334,12 +378,33 @@ export const githubRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
+      if (repository.webhookId && repository.owner && repository.name) {
+        try {
+          const octokit = await getInstallationOctokit(repository.installationId);
+          await octokit.repos.deleteWebhook({
+            owner: repository.owner,
+            repo: repository.name,
+            hook_id: repository.webhookId,
+          });
+        } catch (error) {
+          // Best-effort: the webhook may already be gone (manually removed,
+          // installation revoked, etc.) — don't block disconnection on it.
+          console.error("Failed to delete GitHub webhook", error);
+        }
+      }
+
       await ctx.db.delete(pullRequests).where(eq(pullRequests.repositoryId, repository.id));
       await ctx.db.delete(codeChunks).where(eq(codeChunks.repositoryId, repository.id));
 
       await ctx.db
         .update(repositories)
-        .set({ disconnectedAt: new Date(), isIndexed: false, indexedAt: null })
+        .set({
+          disconnectedAt: new Date(),
+          isIndexed: false,
+          indexedAt: null,
+          webhookId: null,
+          webhookSecret: null,
+        })
         .where(eq(repositories.id, repository.id));
 
       return { ok: true };

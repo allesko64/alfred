@@ -8,3 +8,5 @@ export * from "./invite.schema";
 export * from "./prd.schema";
 export * from "./user.schema";
 export * from "./review.schema";
+export * from "./notification.schema";
+export * from "./changelog.schema";

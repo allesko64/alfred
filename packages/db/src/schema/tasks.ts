@@ -1,4 +1,11 @@
-import { index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { taskPriorityEnum, taskStatusEnum } from "./enums";
 import { features } from "./features";
 import { users } from "./users";
@@ -13,12 +20,14 @@ export const tasks = pgTable(
       .references(() => features.id, { onDelete: "cascade" }),
     workspaceId: uuid("workspace_id")
       .notNull()
-      .references(() => workspaces.id),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     description: text("description"),
     status: taskStatusEnum("status").notNull().default("TODO"),
     priority: taskPriorityEnum("priority").notNull().default("MEDIUM"),
-    assignedTo: uuid("assigned_to").references(() => users.id),
+    assignedTo: uuid("assigned_to").references(() => users.id, {
+      onDelete: "set null",
+    }),
     estimatedHours: integer("estimated_hours"),
     position: integer("position"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -27,5 +36,6 @@ export const tasks = pgTable(
   (table) => [
     index("tasks_feature_idx").on(table.featureId),
     index("tasks_status_idx").on(table.status),
+    index("tasks_workspace_idx").on(table.workspaceId),
   ],
 );

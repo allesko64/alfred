@@ -8,6 +8,6 @@ if (!connectionString) {
   throw new Error("DATABASE_URL is not set");
 }
 
-const queryClient = postgres(connectionString);
+export const queryClient = postgres(connectionString);
 
 export const db = drizzle(queryClient, { schema });

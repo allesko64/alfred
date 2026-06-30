@@ -19,7 +19,8 @@ import { reportWorkflowProgress } from "../workflow-runs";
 const APPROVER_ROLES = ["owner", "admin", "reviewer"] as const;
 
 /** Spec 10.1: configurable — default allows shipping with an open (unmerged) PR. */
-const REQUIRE_PR_MERGED = process.env.RELEASE_READINESS_REQUIRE_MERGED === "true";
+const REQUIRE_PR_MERGED =
+  process.env.RELEASE_READINESS_REQUIRE_MERGED === "true";
 
 const RELEASE_SUMMARY_PROMPT = `You are Alfred, an AI software delivery co-pilot. A feature has passed
 every automated gate and is about to be handed to a human approver.
@@ -51,22 +52,45 @@ interface ReleaseSummaryOut {
 }
 
 const _releaseReadinessWorkflow = inngest.createFunction(
-  { id: "feature-release-readiness", triggers: { event: "feature/release-readiness.requested" } },
+  {
+    id: "feature-release-readiness",
+    triggers: { event: "feature/release-readiness.requested" },
+  },
   async ({ event, step }) => {
     const { featureId } = event.data;
 
     const context = await step.run("fetch-context", async () => {
-      const [feature] = await db.select().from(features).where(eq(features.id, featureId)).limit(1);
+      const [feature] = await db
+        .select()
+        .from(features)
+        .where(eq(features.id, featureId))
+        .limit(1);
       if (!feature) return null;
 
-      const [pr] = await db.select().from(pullRequests).where(eq(pullRequests.featureId, featureId)).limit(1);
-      const [prd] = await db.select().from(prds).where(eq(prds.featureId, featureId)).limit(1);
-      const taskRows = await db.select().from(tasks).where(eq(tasks.featureId, featureId));
+      const [pr] = await db
+        .select()
+        .from(pullRequests)
+        .where(eq(pullRequests.featureId, featureId))
+        .limit(1);
+      const [prd] = await db
+        .select()
+        .from(prds)
+        .where(eq(prds.featureId, featureId))
+        .limit(1);
+      const taskRows = await db
+        .select()
+        .from(tasks)
+        .where(eq(tasks.featureId, featureId));
 
       const [latestReview] = await db
         .select()
         .from(aiReviews)
-        .where(and(eq(aiReviews.featureId, featureId), eq(aiReviews.isArchived, false)))
+        .where(
+          and(
+            eq(aiReviews.featureId, featureId),
+            eq(aiReviews.isArchived, false),
+          ),
+        )
         .orderBy(desc(aiReviews.reviewNumber))
         .limit(1);
 
@@ -90,7 +114,8 @@ const _releaseReadinessWorkflow = inngest.createFunction(
       return { status: "skipped", reason: "feature-not-found" };
     }
 
-    const { feature, pr, prd, taskRows, latestReview, unresolvedBlocking } = context;
+    const { feature, pr, prd, taskRows, latestReview, unresolvedBlocking } =
+      context;
 
     await step.run("report-progress-running", async () => {
       await reportWorkflowProgress(featureId, "release_readiness", {
@@ -104,7 +129,10 @@ const _releaseReadinessWorkflow = inngest.createFunction(
     if (!latestReview || latestReview.status !== "PASSED") {
       reasons.push("AI review has not passed yet");
     }
-    if ((latestReview?.blockingCount ?? 1) > 0 || unresolvedBlocking.length > 0) {
+    if (
+      (latestReview?.blockingCount ?? 1) > 0 ||
+      unresolvedBlocking.length > 0
+    ) {
       reasons.push("There are unresolved blocking issues");
     }
     const incompleteTasks = taskRows.filter((t) => t.status !== "DONE");
@@ -113,8 +141,14 @@ const _releaseReadinessWorkflow = inngest.createFunction(
     }
     if (!pr) {
       reasons.push("No pull request is linked");
-    } else if (REQUIRE_PR_MERGED ? pr.status !== "MERGED" : pr.status === "CLOSED") {
-      reasons.push(REQUIRE_PR_MERGED ? "The pull request is not merged" : "The pull request was closed unmerged");
+    } else if (
+      REQUIRE_PR_MERGED ? pr.status !== "MERGED" : pr.status === "CLOSED"
+    ) {
+      reasons.push(
+        REQUIRE_PR_MERGED
+          ? "The pull request is not merged"
+          : "The pull request was closed unmerged",
+      );
     }
 
     if (reasons.length > 0) {
@@ -129,12 +163,26 @@ const _releaseReadinessWorkflow = inngest.createFunction(
     }
 
     const summary = await step.run("generate-release-summary", async () => {
-      const prompt = RELEASE_SUMMARY_PROMPT.replace("{{FEATURE_TITLE}}", feature.title)
-        .replace("{{PROBLEM_STATEMENT}}", prd?.problemStatement ?? "Not specified")
-        .replace("{{TASKS}}", taskRows.map((t) => `- ${t.title}`).join("\n") || "No tasks recorded")
-        .replace("{{REVIEW_SUMMARY}}", latestReview?.summary ?? "No summary available");
+      const prompt = RELEASE_SUMMARY_PROMPT.replace(
+        "{{FEATURE_TITLE}}",
+        feature.title,
+      )
+        .replace(
+          "{{PROBLEM_STATEMENT}}",
+          prd?.problemStatement ?? "Not specified",
+        )
+        .replace(
+          "{{TASKS}}",
+          taskRows.map((t) => `- ${t.title}`).join("\n") || "No tasks recorded",
+        )
+        .replace(
+          "{{REVIEW_SUMMARY}}",
+          latestReview?.summary ?? "No summary available",
+        );
 
-      const result = await chatCompleteJSON<ReleaseSummaryOut>([{ role: "system", content: prompt }]);
+      const { data: result } = await chatCompleteJSON<ReleaseSummaryOut>([
+        { role: "system", content: prompt },
+      ]);
       return result.summary;
     });
 
@@ -180,4 +228,5 @@ const _releaseReadinessWorkflow = inngest.createFunction(
   },
 );
 
-export const releaseReadinessWorkflow: InngestFunction.Any = _releaseReadinessWorkflow;
+export const releaseReadinessWorkflow: InngestFunction.Any =
+  _releaseReadinessWorkflow;

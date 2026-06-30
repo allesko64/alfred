@@ -3,7 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./feature-status-groups": "./src/feature-status-groups.ts",
+    "./enums": "./src/schema/enums.ts"
   },
   "scripts": {
     "build": "tsc",

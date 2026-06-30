@@ -10,8 +10,10 @@ import { z } from "zod";
 import {
   aiReviews,
   checkAndDeductCredits,
+  checkBillingLimit,
   clarificationMessages,
   features,
+  featureStatusEnum,
   notifications,
   prds,
   pullRequests,
@@ -61,7 +63,7 @@ const PIPELINE_STAGES = [
   {
     key: "approval",
     label: "Approval",
-    statuses: ["PENDING_APPROVAL", "APPROVED", "SHIPPED", "REJECTED"],
+    statuses: ["PENDING_APPROVAL", "SHIPPED", "REJECTED"],
   },
 ] as const;
 
@@ -71,24 +73,8 @@ const featureOutputSchema = z.object({
   projectId: z.string().uuid().nullable(),
   title: z.string(),
   originalRequest: z.string(),
-  status: z.enum([
-    "DRAFT",
-    "CLARIFYING",
-    "PRD_GENERATION",
-    "PRD_READY",
-    "TASK_GENERATION",
-    "PLANNING",
-    "IN_DEVELOPMENT",
-    "PR_LINKED",
-    "REVIEWING",
-    "CHANGES_REQUESTED",
-    "RE_REVIEWING",
-    "REVIEW_PASSED",
-    "PENDING_APPROVAL",
-    "APPROVED",
-    "SHIPPED",
-    "REJECTED",
-  ]),
+  // Derived from the DB enum so adding a new status only requires one change.
+  status: z.enum(featureStatusEnum.enumValues),
   createdBy: z.string().uuid(),
   assignedTo: z.string().uuid().nullable(),
   approvedBy: z.string().uuid().nullable(),
@@ -101,7 +87,6 @@ const featureOutputSchema = z.object({
 });
 
 export const featureRouter = createTRPCRouter({
-  /** Feature creation is always free (never gated) — only the AI clarification round it kicks off costs a credit. */
   create: workspaceProcedure
     .meta({
       openapi: { method: "POST", path: "/feature.create", tags: ["feature"] },
@@ -109,6 +94,16 @@ export const featureRouter = createTRPCRouter({
     .input(createFeatureSchema)
     .output(featureOutputSchema)
     .mutation(async ({ ctx, input }) => {
+      // Enforce active-feature cap per plan (free plan: max 4 active features).
+      const featureLimit = await checkBillingLimit(ctx.workspaceId, "features");
+      if (!featureLimit.allowed) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: `You've reached your plan's active feature limit (${featureLimit.limit}). Ship or reject existing features, or upgrade for more.`,
+          cause: { billingLimit: true },
+        });
+      }
+
       const [feature] = await ctx.db
         .insert(features)
         .values({
@@ -161,7 +156,7 @@ export const featureRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const [feature] = await ctx.db
-        .select({ id: features.id })
+        .select({ id: features.id, status: features.status })
         .from(features)
         .where(
           and(
@@ -175,6 +170,13 @@ export const featureRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
+      if (feature.status !== "CLARIFYING") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Cannot submit a clarification reply — feature is in '${feature.status}' status, expected 'CLARIFYING'.`,
+        });
+      }
+
       const credits = await checkAndDeductCredits(
         ctx.workspaceId,
         "clarification_message",
@@ -184,6 +186,7 @@ export const featureRouter = createTRPCRouter({
           code: "FORBIDDEN",
           message:
             "You're out of AI credits. Upgrade or wait for your next monthly reset.",
+          cause: { billingLimit: true },
         });
       }
 
@@ -314,6 +317,7 @@ export const featureRouter = createTRPCRouter({
     }),
 
   delete: workspaceProcedure
+    .use(requireWorkspaceRole(["owner", "admin"]))
     .input(
       z.object({
         workspaceId: z.string().uuid(),
@@ -322,7 +326,7 @@ export const featureRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const [feature] = await ctx.db
-        .select({ id: features.id })
+        .select({ id: features.id, status: features.status })
         .from(features)
         .where(
           and(
@@ -334,6 +338,19 @@ export const featureRouter = createTRPCRouter({
 
       if (!feature) {
         throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      // Prevent deletion while a feature is actively in the review/approval pipeline.
+      const lockedStatuses = [
+        "REVIEWING",
+        "RE_REVIEWING",
+        "PENDING_APPROVAL",
+      ] as const;
+      if ((lockedStatuses as readonly string[]).includes(feature.status)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Cannot delete a feature in '${feature.status}' status. Complete or reject the active workflow first.`,
+        });
       }
 
       await ctx.db
@@ -503,7 +520,7 @@ export const featureRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const [feature] = await ctx.db
-        .select({ id: features.id })
+        .select({ id: features.id, status: features.status })
         .from(features)
         .where(
           and(
@@ -515,6 +532,19 @@ export const featureRouter = createTRPCRouter({
 
       if (!feature) {
         throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      // Release readiness is only meaningful once a code review has passed.
+      const validStatuses = [
+        "REVIEW_PASSED",
+        "PENDING_APPROVAL",
+        "CHANGES_REQUESTED",
+      ] as const;
+      if (!(validStatuses as readonly string[]).includes(feature.status)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Release readiness check requires the feature to be in REVIEW_PASSED or later. Current status: '${feature.status}'.`,
+        });
       }
 
       await inngest.send({

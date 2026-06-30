@@ -1,6 +1,12 @@
-import { and, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, not, inArray, sql } from "drizzle-orm";
 import { db } from "./client";
-import { repositories, workspaceMemberships, workspaces, type WorkspacePlan } from "./schema";
+import {
+  features,
+  repositories,
+  workspaceMemberships,
+  workspaces,
+  type WorkspacePlan,
+} from "./schema";
 
 /** Monthly AI credit allowance per plan. Resets via cron and on plan change. */
 export const PLAN_CREDITS: Record<WorkspacePlan, number> = {
@@ -20,13 +26,20 @@ export const CREDIT_COSTS = {
 
 export type CreditAction = keyof typeof CREDIT_COSTS;
 
-export type BillingLimitType = "repos" | "members";
+export type BillingLimitType = "repos" | "members" | "features";
 
-/** Hard caps on repos/members — these don't consume credits, just cap a count. */
+/**
+ * Hard caps on repos/members/features — these don't consume credits, just cap a count.
+ * The features cap limits active (non-terminal) features on the free plan.
+ */
 const PLAN_LIMITS: Record<BillingLimitType, Record<WorkspacePlan, number>> = {
   repos: { free: 1, pro: 3, team: Infinity },
   members: { free: 1, pro: 5, team: 25 },
+  features: { free: 4, pro: Infinity, team: Infinity },
 };
+
+/** Terminal statuses — features in these states don't count toward the active cap. */
+const TERMINAL_FEATURE_STATUSES = ["SHIPPED", "REJECTED"] as const;
 
 export interface BillingLimitResult {
   allowed: boolean;
@@ -39,20 +52,45 @@ async function count(query: Promise<{ count: number }[]>): Promise<number> {
   return row?.count ?? 0;
 }
 
-const COUNTERS: Record<BillingLimitType, (workspaceId: string) => Promise<number>> = {
+const COUNTERS: Record<
+  BillingLimitType,
+  (workspaceId: string) => Promise<number>
+> = {
   repos: (workspaceId) =>
     count(
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(repositories)
-        .where(and(eq(repositories.workspaceId, workspaceId), isNull(repositories.disconnectedAt))),
+        .where(
+          and(
+            eq(repositories.workspaceId, workspaceId),
+            isNull(repositories.disconnectedAt),
+          ),
+        ),
     ),
   members: (workspaceId) =>
     count(
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(workspaceMemberships)
-        .where(and(eq(workspaceMemberships.workspaceId, workspaceId), eq(workspaceMemberships.status, "active"))),
+        .where(
+          and(
+            eq(workspaceMemberships.workspaceId, workspaceId),
+            eq(workspaceMemberships.status, "active"),
+          ),
+        ),
+    ),
+  features: (workspaceId) =>
+    count(
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(features)
+        .where(
+          and(
+            eq(features.workspaceId, workspaceId),
+            not(inArray(features.status, TERMINAL_FEATURE_STATUSES)),
+          ),
+        ),
     ),
 };
 
@@ -84,13 +122,21 @@ export interface CreditCheckResult {
  * Atomically checks and deducts credits in one statement, so concurrent
  * requests can't both pass the check before either deduction lands.
  */
-export async function checkAndDeductCredits(workspaceId: string, action: CreditAction): Promise<CreditCheckResult> {
+export async function checkAndDeductCredits(
+  workspaceId: string,
+  action: CreditAction,
+): Promise<CreditCheckResult> {
   const cost = CREDIT_COSTS[action];
 
   const [deducted] = await db
     .update(workspaces)
     .set({ creditsRemaining: sql`${workspaces.creditsRemaining} - ${cost}` })
-    .where(and(eq(workspaces.id, workspaceId), gte(workspaces.creditsRemaining, cost)))
+    .where(
+      and(
+        eq(workspaces.id, workspaceId),
+        gte(workspaces.creditsRemaining, cost),
+      ),
+    )
     .returning({ creditsRemaining: workspaces.creditsRemaining });
 
   if (deducted) {
@@ -106,13 +152,21 @@ export async function checkAndDeductCredits(workspaceId: string, action: CreditA
   return { allowed: false, remaining: workspace?.creditsRemaining ?? 0, cost };
 }
 
-export async function getCreditsStatus(workspaceId: string): Promise<{ remaining: number; limit: number }> {
+export async function getCreditsStatus(
+  workspaceId: string,
+): Promise<{ remaining: number; limit: number }> {
   const [workspace] = await db
-    .select({ plan: workspaces.plan, creditsRemaining: workspaces.creditsRemaining })
+    .select({
+      plan: workspaces.plan,
+      creditsRemaining: workspaces.creditsRemaining,
+    })
     .from(workspaces)
     .where(eq(workspaces.id, workspaceId))
     .limit(1);
 
   const plan = workspace?.plan ?? "free";
-  return { remaining: workspace?.creditsRemaining ?? 0, limit: PLAN_CREDITS[plan] };
+  return {
+    remaining: workspace?.creditsRemaining ?? 0,
+    limit: PLAN_CREDITS[plan],
+  };
 }

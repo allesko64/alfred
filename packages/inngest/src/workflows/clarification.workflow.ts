@@ -22,41 +22,59 @@ interface ClarificationDecision {
 }
 
 const _clarificationWorkflow = inngest.createFunction(
-  { id: "feature-clarification", triggers: { event: "feature/clarification.requested" } },
+  {
+    id: "feature-clarification",
+    triggers: { event: "feature/clarification.requested" },
+  },
   async ({ event, step }) => {
     const { featureId } = event.data;
 
-    const { feature, messages } = await step.run("fetch-feature-and-messages", async () => {
-      const [feature] = await db.select().from(features).where(eq(features.id, featureId)).limit(1);
-      if (!feature) {
-        throw new Error(`Feature ${featureId} not found`);
-      }
+    const { feature, messages } = await step.run(
+      "fetch-feature-and-messages",
+      async () => {
+        const [feature] = await db
+          .select()
+          .from(features)
+          .where(eq(features.id, featureId))
+          .limit(1);
+        if (!feature) {
+          throw new Error(`Feature ${featureId} not found`);
+        }
 
-      const messages = await db
-        .select()
-        .from(clarificationMessages)
-        .where(eq(clarificationMessages.featureId, featureId))
-        .orderBy(asc(clarificationMessages.createdAt));
+        const messages = await db
+          .select()
+          .from(clarificationMessages)
+          .where(eq(clarificationMessages.featureId, featureId))
+          .orderBy(asc(clarificationMessages.createdAt));
 
-      return { feature, messages };
-    });
+        return { feature, messages };
+      },
+    );
 
-    const alfredQuestionCount = messages.filter((m) => m.role === "alfred").length;
+    const alfredQuestionCount = messages.filter(
+      (m) => m.role === "alfred",
+    ).length;
     const hasEnoughInfo = alfredQuestionCount >= MAX_ALFRED_QUESTIONS;
 
     if (!hasEnoughInfo) {
-      const decision = await step.run("ask-claude-for-next-question", async () => {
-        return chatCompleteJSON<ClarificationDecision>([
-          {
-            role: "system",
-            content: `You are Alfred, a product assistant clarifying a feature request before a PRD is written. Make sure these points are covered before you stop asking questions:\n- ${CLARIFICATION_CHECKLIST}\n\nPrefer multiple-choice questions over open-ended ones whenever the answer fits a short list of concrete choices (e.g. target audience, scope, priority level). Give 2-3 short, mutually distinct options in "options" — the UI automatically appends a 4th "write my own answer" choice, so never include that yourself. Only leave "options" empty when the answer genuinely needs free text (e.g. asking for specific numbers, names, or open descriptions).\n\nRespond with ONLY JSON: { "done": boolean, "question": string (only if done is false), "options": string[] (only if done is false and a multiple-choice question makes sense, max 3 items) }. Set "done": true once you have enough information to write a thorough PRD, or once you've already asked ${MAX_ALFRED_QUESTIONS} questions.`,
-          },
-          ...messages.map((m) => ({
-            role: (m.role === "alfred" ? "assistant" : "user") as "assistant" | "user",
-            content: m.content,
-          })),
-        ]);
-      });
+      const decision = await step.run(
+        "ask-claude-for-next-question",
+        async () => {
+          const { data } = await chatCompleteJSON<ClarificationDecision>([
+            {
+              role: "system",
+              content: `You are Alfred, a product assistant clarifying a feature request before a PRD is written. Make sure these points are covered before you stop asking questions:\n- ${CLARIFICATION_CHECKLIST}\n\nPrefer multiple-choice questions over open-ended ones whenever the answer fits a short list of concrete choices (e.g. target audience, scope, priority level). Give 2-3 short, mutually distinct options in "options" — the UI automatically appends a 4th "write my own answer" choice, so never include that yourself. Only leave "options" empty when the answer genuinely needs free text (e.g. asking for specific numbers, names, or open descriptions).\n\nRespond with ONLY JSON: { "done": boolean, "question": string (only if done is false), "options": string[] (only if done is false and a multiple-choice question makes sense, max 3 items) }. Set "done": true once you have enough information to write a thorough PRD, or once you've already asked ${MAX_ALFRED_QUESTIONS} questions.`,
+            },
+            ...messages.map((m) => ({
+              role: (m.role === "alfred" ? "assistant" : "user") as
+                | "assistant"
+                | "user",
+              content: m.content,
+            })),
+          ]);
+          return data;
+        },
+      );
 
       if (!decision.done && decision.question) {
         await step.run("save-alfred-question", async () => {
@@ -64,9 +82,15 @@ const _clarificationWorkflow = inngest.createFunction(
             featureId,
             role: "alfred",
             content: decision.question!,
-            options: decision.options && decision.options.length > 0 ? decision.options : undefined,
+            options:
+              decision.options && decision.options.length > 0
+                ? decision.options
+                : undefined,
           });
-          await db.update(features).set({ status: "CLARIFYING", updatedAt: new Date() }).where(eq(features.id, featureId));
+          await db
+            .update(features)
+            .set({ status: "CLARIFYING", updatedAt: new Date() })
+            .where(eq(features.id, featureId));
           await reportWorkflowProgress(featureId, "clarification", {
             status: "running",
             progressMessage: "Alfred is thinking...",
@@ -80,7 +104,7 @@ const _clarificationWorkflow = inngest.createFunction(
 
     const title = await step.run("generate-title", async () => {
       const firstMessage = messages[0]?.content ?? feature.originalRequest;
-      const result = await chatCompleteJSON<{ title: string }>([
+      const { data: result } = await chatCompleteJSON<{ title: string }>([
         {
           role: "system",
           content:
@@ -113,4 +137,5 @@ const _clarificationWorkflow = inngest.createFunction(
   },
 );
 
-export const clarificationWorkflow: InngestFunction.Any = _clarificationWorkflow;
+export const clarificationWorkflow: InngestFunction.Any =
+  _clarificationWorkflow;

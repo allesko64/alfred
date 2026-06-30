@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { desc, eq } from "drizzle-orm";
-import { z } from "zod";
+import { workspaceSlugInputSchema } from "@alfred/validators";
 import { changelog, features, workspaces } from "@alfred/db";
 import { createTRPCRouter, publicProcedure, workspaceInputSchema, workspaceProcedure } from "../trpc";
 
@@ -25,7 +25,7 @@ export const changelogRouter = createTRPCRouter({
 
   /** Public, unauthenticated changelog at /changelog/[workspaceSlug] — spec 10.4. */
   getPublicByWorkspaceSlug: publicProcedure
-    .input(z.object({ workspaceSlug: z.string() }))
+    .input(workspaceSlugInputSchema)
     .query(async ({ ctx, input }) => {
       const [workspace] = await ctx.db
         .select({ id: workspaces.id, name: workspaces.name })

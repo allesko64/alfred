@@ -1,27 +1,41 @@
 import { chatCompleteJSON, getLLMModel } from "@alfred/ai";
-import { checkAndDeductCredits, clarificationMessages, db, features, notifications, prds } from "@alfred/db";
+import {
+  checkAndDeductCredits,
+  clarificationMessages,
+  db,
+  features,
+  notifications,
+  prds,
+} from "@alfred/db";
 import { asc, eq } from "drizzle-orm";
 import type { InngestFunction } from "inngest";
+import { z } from "zod";
 import { inngest } from "../client";
 import { reportWorkflowProgress } from "../workflow-runs";
 
-interface GeneratedPRD {
-  problem_statement: string;
-  goals: string[];
-  non_goals: string[];
-  user_stories: string[];
-  acceptance_criteria: string[];
-  assumptions: string[];
-  scope_warning: string | null;
-  generated_by: string;
-}
+const generatedPRDSchema = z.object({
+  problem_statement: z.string().min(1),
+  goals: z.array(z.string()).min(1),
+  non_goals: z.array(z.string()).min(1),
+  user_stories: z.array(z.string()).min(1),
+  acceptance_criteria: z.array(z.string()).min(1),
+  assumptions: z.array(z.string()),
+  scope_warning: z.string().nullable(),
+  generated_by: z.string(),
+});
 
-interface GuardrailError {
-  error: "guardrail_violation" | "insufficient_context";
-  reason: string;
-}
+type GeneratedPRD = z.infer<typeof generatedPRDSchema>;
 
-function isGuardrailError(result: GeneratedPRD | GuardrailError): result is GuardrailError {
+const guardrailErrorSchema = z.object({
+  error: z.enum(["guardrail_violation", "insufficient_context"]),
+  reason: z.string(),
+});
+
+type GuardrailError = z.infer<typeof guardrailErrorSchema>;
+
+function isGuardrailError(
+  result: GeneratedPRD | GuardrailError,
+): result is GuardrailError {
   return "error" in result;
 }
 
@@ -150,139 +164,206 @@ The JSON must follow this exact structure with these exact field names:
 Every field is required. Arrays must have at least two items. No field can be null except scope_warning. Do not add any fields not listed above.`;
 
 const _prdGenerationWorkflow = inngest.createFunction(
-  { id: "feature-prd-generation", triggers: { event: "feature/prd-generation.requested" } },
-  async ({ event, step }) => {
+  {
+    id: "feature-prd-generation",
+    triggers: { event: "feature/prd-generation.requested" },
+  },
+  async ({ event, step, runId }) => {
     const { featureId } = event.data;
 
-    const { feature, messages } = await step.run("fetch-feature-and-messages", async () => {
-      const [feature] = await db.select().from(features).where(eq(features.id, featureId)).limit(1);
-      if (!feature) {
-        throw new Error(`Feature ${featureId} not found`);
-      }
-
-      const messages = await db
-        .select()
-        .from(clarificationMessages)
-        .where(eq(clarificationMessages.featureId, featureId))
-        .orderBy(asc(clarificationMessages.createdAt));
-
-      return { feature, messages };
-    });
-
-    const credits = await step.run("check-and-deduct-credits", async () =>
-      checkAndDeductCredits(feature.workspaceId, "prd_generation"),
-    );
-
-    if (!credits.allowed) {
-      await step.run("save-billing-block", async () => {
-        await db.insert(notifications).values({
-          userId: feature.createdBy,
-          workspaceId: feature.workspaceId,
-          type: "prd_blocked",
-          title: "PRD generation blocked",
-          message: "Out of AI credits. Upgrade or wait for your next monthly reset.",
-          featureId,
-        });
-
-        await reportWorkflowProgress(featureId, "prd_generation", {
-          status: "failed",
-          progressMessage: "PRD generation blocked — out of AI credits",
-          progressPercent: 100,
-          errorMessage: "Out of AI credits. Upgrade or wait for your next monthly reset.",
-        });
-      });
-
-      return { status: "blocked", reason: "billing_limit" };
-    }
-
-    await step.run("report-writing-progress", async () => {
+    try {
       await reportWorkflowProgress(featureId, "prd_generation", {
+        inngestRunId: runId,
         status: "running",
-        progressMessage: "Alfred is writing your PRD...",
-        progressPercent: 10,
+        progressMessage: "Fetching feature and conversation history...",
+        progressPercent: 5,
       });
-    });
 
-    const result = await step.run("generate-prd", async () => {
-      const conversation = messages.map((m) => `${m.role === "alfred" ? "Alfred" : "User"}: ${m.content}`).join("\n\n");
+      const { feature, messages } = await step.run(
+        "fetch-feature-and-messages",
+        async () => {
+          const [feature] = await db
+            .select()
+            .from(features)
+            .where(eq(features.id, featureId))
+            .limit(1);
+          if (!feature) {
+            throw new Error(`Feature ${featureId} not found`);
+          }
 
-      // Repo vectorization isn't wired into this workflow yet — codebase context is
-      // intentionally empty until that pipeline feeds real chunks in here.
-      const prompt = PRD_SYSTEM_PROMPT.replace("{{CLARIFICATION_MESSAGES}}", conversation).replace(
-        "{{CODEBASE_CONTEXT}}",
-        "",
+          const messages = await db
+            .select()
+            .from(clarificationMessages)
+            .where(eq(clarificationMessages.featureId, featureId))
+            .orderBy(asc(clarificationMessages.createdAt));
+
+          return { feature, messages };
+        },
       );
 
-      return chatCompleteJSON<GeneratedPRD | GuardrailError>([{ role: "system", content: prompt }]);
-    });
+      const credits = await step.run("check-and-deduct-credits", async () =>
+        checkAndDeductCredits(feature.workspaceId, "prd_generation"),
+      );
 
-    if (isGuardrailError(result)) {
-      await step.run("save-guardrail-rejection", async () => {
+      if (!credits.allowed) {
+        await step.run("save-billing-block", async () => {
+          await db.insert(notifications).values({
+            userId: feature.createdBy,
+            workspaceId: feature.workspaceId,
+            type: "prd_blocked",
+            title: "PRD generation blocked",
+            message:
+              "Out of AI credits. Upgrade or wait for your next monthly reset.",
+            featureId,
+          });
+
+          await reportWorkflowProgress(featureId, "prd_generation", {
+            status: "failed",
+            progressMessage: "PRD generation blocked — out of AI credits",
+            progressPercent: 100,
+            errorMessage:
+              "Out of AI credits. Upgrade or wait for your next monthly reset.",
+          });
+        });
+
+        return { status: "blocked", reason: "billing_limit" };
+      }
+
+      await step.run("report-writing-progress", async () => {
+        await reportWorkflowProgress(featureId, "prd_generation", {
+          inngestRunId: runId,
+          status: "running",
+          progressMessage: "Alfred is writing your PRD...",
+          progressPercent: 10,
+        });
+      });
+
+      const result = await step.run("generate-prd", async () => {
+        const conversation = messages
+          .map(
+            (m) => `${m.role === "alfred" ? "Alfred" : "User"}: ${m.content}`,
+          )
+          .join("\n\n");
+
+        // Repo vectorization isn't wired into this workflow yet — codebase context is
+        // intentionally empty until that pipeline feeds real chunks in here.
+        const prompt = PRD_SYSTEM_PROMPT.replace(
+          "{{CLARIFICATION_MESSAGES}}",
+          conversation,
+        ).replace("{{CODEBASE_CONTEXT}}", "");
+
+        const { data: raw } = await chatCompleteJSON<unknown>([
+          { role: "system", content: prompt },
+        ]);
+
+        // Validate against guardrail error shape first, then the full PRD schema.
+        const guardrailParsed = guardrailErrorSchema.safeParse(raw);
+        if (guardrailParsed.success) return guardrailParsed.data;
+
+        const prdParsed = generatedPRDSchema.safeParse(raw);
+        if (!prdParsed.success) {
+          throw new Error(
+            `PRD response did not match expected structure: ${prdParsed.error.message}`,
+          );
+        }
+        return prdParsed.data;
+      });
+
+      await step.run("report-progress-prd-generated", async () => {
+        await reportWorkflowProgress(featureId, "prd_generation", {
+          status: "running",
+          progressMessage: "PRD draft generated, validating...",
+          progressPercent: 60,
+        });
+      });
+
+      if (isGuardrailError(result)) {
+        await step.run("save-guardrail-rejection", async () => {
+          await db
+            .update(features)
+            .set({
+              status: "REJECTED",
+              rejectedAt: new Date(),
+              rejectionReason: result.reason,
+              updatedAt: new Date(),
+            })
+            .where(eq(features.id, featureId));
+
+          await db.insert(notifications).values({
+            userId: feature.createdBy,
+            workspaceId: feature.workspaceId,
+            type: "prd_blocked",
+            title: "PRD generation blocked",
+            message: result.reason,
+            featureId,
+          });
+
+          await reportWorkflowProgress(featureId, "prd_generation", {
+            status: "failed",
+            progressMessage: "PRD generation blocked",
+            progressPercent: 100,
+            errorMessage: result.reason,
+          });
+        });
+
+        return { status: "blocked", reason: result.reason };
+      }
+
+      await step.run("report-progress-70", async () => {
+        await reportWorkflowProgress(featureId, "prd_generation", {
+          status: "running",
+          progressPercent: 70,
+        });
+      });
+
+      await step.run("save-prd-and-notify", async () => {
+        await db.insert(prds).values({
+          featureId,
+          problemStatement: result.problem_statement,
+          goals: result.goals,
+          nonGoals: result.non_goals,
+          userStories: result.user_stories,
+          acceptanceCriteria: result.acceptance_criteria,
+          assumptions: result.assumptions,
+          scopeWarning: result.scope_warning,
+          generatedBy: getLLMModel(),
+        });
+
         await db
           .update(features)
-          .set({ status: "REJECTED", rejectedAt: new Date(), rejectionReason: result.reason, updatedAt: new Date() })
+          .set({ status: "PRD_READY", updatedAt: new Date() })
           .where(eq(features.id, featureId));
 
         await db.insert(notifications).values({
           userId: feature.createdBy,
           workspaceId: feature.workspaceId,
-          type: "prd_blocked",
-          title: "PRD generation blocked",
-          message: result.reason,
+          type: "prd_ready",
+          title: "PRD ready",
+          message: "PRD is ready for your review",
           featureId,
         });
 
         await reportWorkflowProgress(featureId, "prd_generation", {
-          status: "failed",
-          progressMessage: "PRD generation blocked",
+          status: "completed",
+          progressMessage: "PRD ready",
           progressPercent: 100,
-          errorMessage: result.reason,
         });
       });
 
-      return { status: "blocked", reason: result.reason };
-    }
-
-    await step.run("report-progress-70", async () => {
+      return { status: "prd-ready" };
+    } catch (error) {
+      // Catch unexpected errors (DB, network, unexpected LLM output) and mark the
+      // workflow_runs row as failed so the UI doesn't show a stuck progress bar.
       await reportWorkflowProgress(featureId, "prd_generation", {
-        status: "running",
-        progressPercent: 70,
-      });
-    });
-
-    await step.run("save-prd-and-notify", async () => {
-      await db.insert(prds).values({
-        featureId,
-        problemStatement: result.problem_statement,
-        goals: result.goals,
-        nonGoals: result.non_goals,
-        userStories: result.user_stories,
-        acceptanceCriteria: result.acceptance_criteria,
-        assumptions: result.assumptions,
-        scopeWarning: result.scope_warning,
-        generatedBy: getLLMModel(),
-      });
-
-      await db.update(features).set({ status: "PRD_READY", updatedAt: new Date() }).where(eq(features.id, featureId));
-
-      await db.insert(notifications).values({
-        userId: feature.createdBy,
-        workspaceId: feature.workspaceId,
-        type: "prd_ready",
-        title: "PRD ready",
-        message: "PRD is ready for your review",
-        featureId,
-      });
-
-      await reportWorkflowProgress(featureId, "prd_generation", {
-        status: "completed",
-        progressMessage: "PRD ready",
+        status: "failed",
+        progressMessage: "PRD generation failed unexpectedly",
+        errorMessage: error instanceof Error ? error.message : String(error),
         progressPercent: 100,
       });
-    });
-
-    return { status: "prd-ready" };
+      throw error; // Re-throw so Inngest records the failure and respects retry policy.
+    }
   },
 );
 
-export const prdGenerationWorkflow: InngestFunction.Any = _prdGenerationWorkflow;
+export const prdGenerationWorkflow: InngestFunction.Any =
+  _prdGenerationWorkflow;

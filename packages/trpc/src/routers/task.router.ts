@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import {
   approveTaskPlanSchema,
   createTaskSchema,
+  featureInputSchema,
   moveTaskSchema,
   updateTaskSchema,
   updateTaskStatusSchema,
@@ -13,7 +14,7 @@ import { createTRPCRouter, workspaceProcedure } from "../trpc";
 
 export const taskRouter = createTRPCRouter({
   getByFeature: workspaceProcedure
-    .input(z.object({ workspaceId: z.string().uuid(), featureId: z.string().uuid() }))
+    .input(featureInputSchema)
     .query(async ({ ctx, input }) => {
       return ctx.db
         .select()

@@ -153,7 +153,9 @@ Write exactly one short sentence (max 20 words), warm and direct, no emoji, no g
 is already written separately). Respond with just the sentence, nothing else.`;
 
   try {
-    return (await chatComplete([{ role: "system", content: prompt }])).trim();
+    return (
+      await chatComplete([{ role: "system", content: prompt }])
+    ).content.trim();
   } catch {
     return summary
       ? "You have a few things on your plate today."

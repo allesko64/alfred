@@ -6,6 +6,7 @@ import { useParams } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import confetti from "canvas-confetti"
+import { PRE_REVIEW_STATUSES } from "@alfred/db/feature-status-groups"
 import {
   CaretRightIcon,
   CheckCircleIcon,
@@ -27,6 +28,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { StatusBadge } from "@/components/workspace/dashboard/status-dot"
 import { AlfredAvatar } from "@/components/workspace/conversation"
 import { useSetFeatureHeaderAction } from "@/components/workspace/feature-detail/feature-header-actions"
+import { ApprovalGate } from "@/components/workspace/feature-detail/approval-gate"
 import {
   IssueCard,
   IssueGroupHeader,
@@ -42,21 +44,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
-const PRE_REVIEW_STATUSES = new Set([
-  "DRAFT",
-  "CLARIFYING",
-  "PRD_GENERATION",
-  "PRD_READY",
-  "TASK_GENERATION",
-  "PLANNING",
-  "IN_DEVELOPMENT",
-  "PR_LINKED",
-  "REVIEWING",
-  "CHANGES_REQUESTED",
-  "RE_REVIEWING",
-])
-
-const APPROVER_ROLES = new Set(["owner", "admin", "reviewer"])
+const PRE_REVIEW_STATUS_SET = new Set<string>(PRE_REVIEW_STATUSES)
 
 type ChecklistState = "done" | "blocking" | "pending"
 
@@ -159,37 +147,35 @@ export function ApprovalClient() {
 
   const details = detailsQuery.data
   const role = workspaceQuery.data?.role
-  const canApprove = !!role && APPROVER_ROLES.has(role)
-  const canShip = canApprove && details?.feature.status === "PENDING_APPROVAL"
 
   useSetFeatureHeaderAction(
     useMemo(() => {
-      if (!canShip) return null
-
       return (
-        <div className="flex items-center gap-2">
-          <Button
-            className="rounded-full bg-destructive px-4 py-1.5 text-sm text-white ring-offset-2 transition duration-200 hover:bg-destructive hover:ring-2 hover:ring-destructive dark:ring-offset-black"
-            onClick={() => setIsRejecting(true)}
-          >
-            <span className="flex items-center gap-1.5 whitespace-nowrap">
-              <XCircleIcon className="size-4" />
-              Reject
-            </span>
-          </Button>
-          <StatefulButton
-            className="px-4 py-1.5 text-sm"
-            onClick={() => approve.mutateAsync({ workspaceId, featureId })}
-          >
-            <span className="flex items-center gap-1.5 whitespace-nowrap">
-              <RocketLaunchIcon className="size-4" />
-              Approve &amp; Ship
-            </span>
-          </StatefulButton>
-        </div>
+        <ApprovalGate role={role} featureStatus={details?.feature.status}>
+          <div className="flex items-center gap-2">
+            <Button
+              className="rounded-full bg-destructive px-4 py-1.5 text-sm text-white ring-offset-2 transition duration-200 hover:bg-destructive hover:ring-2 hover:ring-destructive dark:ring-offset-black"
+              onClick={() => setIsRejecting(true)}
+            >
+              <span className="flex items-center gap-1.5 whitespace-nowrap">
+                <XCircleIcon className="size-4" />
+                Reject
+              </span>
+            </Button>
+            <StatefulButton
+              className="px-4 py-1.5 text-sm"
+              onClick={() => approve.mutateAsync({ workspaceId, featureId })}
+            >
+              <span className="flex items-center gap-1.5 whitespace-nowrap">
+                <RocketLaunchIcon className="size-4" />
+                Approve &amp; Ship
+              </span>
+            </StatefulButton>
+          </div>
+        </ApprovalGate>
       )
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [canShip, workspaceId, featureId]),
+    }, [role, details?.feature.status, workspaceId, featureId]),
   )
 
   if (detailsQuery.isLoading) {
@@ -203,7 +189,7 @@ export function ApprovalClient() {
   const { feature, prd, tasksTotal, tasksDone, pr, latestReview, readinessRun } = details
 
   // State 1 — nothing to approve yet.
-  if (PRE_REVIEW_STATUSES.has(feature.status)) {
+  if (PRE_REVIEW_STATUS_SET.has(feature.status)) {
     return (
       <div className="flex w-full flex-col items-center gap-1 py-16 text-center">
         <span className="text-sm font-medium text-muted-foreground">Approval</span>
@@ -253,7 +239,7 @@ export function ApprovalClient() {
     {
       key: "readiness",
       label: "Release readiness check passed",
-      done: ["PENDING_APPROVAL", "APPROVED", "SHIPPED"].includes(feature.status),
+      done: ["PENDING_APPROVAL", "SHIPPED"].includes(feature.status),
       reason: isCheckingReadiness ? undefined : (readinessRun?.progressMessage ?? "Release readiness check hasn't passed yet."),
     },
   ]

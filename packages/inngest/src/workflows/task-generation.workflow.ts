@@ -1,33 +1,48 @@
 import { chatCompleteJSON, getLLMModel } from "@alfred/ai";
-import { db, features, notifications, prds, tasks } from "@alfred/db";
+import {
+  db,
+  features,
+  notifications,
+  prds,
+  tasks,
+  taskPriorityEnum,
+} from "@alfred/db";
 import { eq } from "drizzle-orm";
 import type { InngestFunction } from "inngest";
+import { z } from "zod";
 import { inngest } from "../client";
 import { reportWorkflowProgress } from "../workflow-runs";
 
-type TaskPriority = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+// Zod schema for a single AI-generated task. Priority defaults to MEDIUM when
+// the model omits or misspells it, preventing invalid DB inserts.
+const generatedTaskSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().min(1),
+  priority: z.enum(taskPriorityEnum.enumValues).default("MEDIUM"),
+  status: z.literal("TODO"),
+  position: z.number().int().min(1),
+  assigned_to: z.null(),
+});
 
-interface GeneratedTask {
-  title: string;
-  description: string;
-  priority: TaskPriority;
-  status: "TODO";
-  position: number;
-  assigned_to: null;
-}
+const generatedTasksResultSchema = z.object({
+  tasks: z.array(generatedTaskSchema).min(1),
+  coverage_check: z.string(),
+  generated_by: z.string(),
+});
 
-interface GeneratedTasksResult {
-  tasks: GeneratedTask[];
-  coverage_check: string;
-  generated_by: string;
-}
+type GeneratedTask = z.infer<typeof generatedTaskSchema>;
+type GeneratedTasksResult = z.infer<typeof generatedTasksResultSchema>;
 
-interface GuardrailError {
-  error: "insufficient_prd";
-  reason: string;
-}
+const guardrailErrorSchema = z.object({
+  error: z.literal("insufficient_prd"),
+  reason: z.string(),
+});
 
-function isGuardrailError(result: GeneratedTasksResult | GuardrailError): result is GuardrailError {
+type GuardrailError = z.infer<typeof guardrailErrorSchema>;
+
+function isGuardrailError(
+  result: GeneratedTasksResult | GuardrailError,
+): result is GuardrailError {
   return "error" in result;
 }
 
@@ -257,7 +272,8 @@ type PRDContentFields = Pick<
 >;
 
 function formatPRDContent(prd: PRDContentFields): string {
-  const list = (items: unknown) => ((items as string[] | null) ?? []).map((item) => `- ${item}`).join("\n");
+  const list = (items: unknown) =>
+    ((items as string[] | null) ?? []).map((item) => `- ${item}`).join("\n");
 
   return [
     `Problem Statement:\n${prd.problemStatement ?? ""}`,
@@ -270,108 +286,174 @@ function formatPRDContent(prd: PRDContentFields): string {
 }
 
 const _taskGenerationWorkflow = inngest.createFunction(
-  { id: "feature-task-generation", triggers: { event: "feature/task-generation.requested" } },
-  async ({ event, step }) => {
+  {
+    id: "feature-task-generation",
+    triggers: { event: "feature/task-generation.requested" },
+  },
+  async ({ event, step, runId }) => {
     const { featureId } = event.data;
 
-    const { feature, prd } = await step.run("fetch-feature-and-prd", async () => {
-      const [feature] = await db.select().from(features).where(eq(features.id, featureId)).limit(1);
-      if (!feature) {
-        throw new Error(`Feature ${featureId} not found`);
-      }
-
-      const [prd] = await db.select().from(prds).where(eq(prds.featureId, featureId)).limit(1);
-      if (!prd) {
-        throw new Error(`PRD for feature ${featureId} not found`);
-      }
-
-      return { feature, prd };
-    });
-
-    await step.run("report-breakdown-progress", async () => {
+    try {
       await reportWorkflowProgress(featureId, "task_generation", {
+        inngestRunId: runId,
         status: "running",
-        progressMessage: "Alfred is breaking down tasks...",
-        progressPercent: 20,
+        progressMessage: "Fetching feature and PRD...",
+        progressPercent: 5,
       });
-    });
 
-    const result = await step.run("generate-tasks", async () => {
-      // Repo vectorization isn't wired into this workflow yet — codebase context is
-      // intentionally empty until that pipeline feeds real chunks in here.
-      const prompt = TASK_GENERATION_SYSTEM_PROMPT.replace("{{FEATURE_TITLE}}", feature.title)
-        .replace("{{PRD_CONTENT}}", formatPRDContent(prd))
-        .replace("{{CODEBASE_CONTEXT}}", "");
+      const { feature, prd } = await step.run(
+        "fetch-feature-and-prd",
+        async () => {
+          const [feature] = await db
+            .select()
+            .from(features)
+            .where(eq(features.id, featureId))
+            .limit(1);
+          if (!feature) {
+            throw new Error(`Feature ${featureId} not found`);
+          }
 
-      return chatCompleteJSON<GeneratedTasksResult | GuardrailError>([{ role: "system", content: prompt }]);
-    });
+          const [prd] = await db
+            .select()
+            .from(prds)
+            .where(eq(prds.featureId, featureId))
+            .limit(1);
+          if (!prd) {
+            throw new Error(`PRD for feature ${featureId} not found`);
+          }
 
-    if (isGuardrailError(result)) {
-      await step.run("save-guardrail-rejection", async () => {
-        await db.update(features).set({ status: "PRD_READY", updatedAt: new Date() }).where(eq(features.id, featureId));
+          return { feature, prd };
+        },
+      );
+
+      await step.run("report-breakdown-progress", async () => {
+        await reportWorkflowProgress(featureId, "task_generation", {
+          inngestRunId: runId,
+          status: "running",
+          progressMessage: "Alfred is breaking down tasks...",
+          progressPercent: 20,
+        });
+      });
+
+      const result = await step.run("generate-tasks", async () => {
+        // Repo vectorization isn't wired into this workflow yet — codebase context is
+        // intentionally empty until that pipeline feeds real chunks in here.
+        const prompt = TASK_GENERATION_SYSTEM_PROMPT.replace(
+          "{{FEATURE_TITLE}}",
+          feature.title,
+        )
+          .replace("{{PRD_CONTENT}}", formatPRDContent(prd))
+          .replace("{{CODEBASE_CONTEXT}}", "");
+
+        const { data: raw } = await chatCompleteJSON<unknown>([
+          { role: "system", content: prompt },
+        ]);
+
+        // Try guardrail error first, then validate the full tasks structure.
+        const guardrailParsed = guardrailErrorSchema.safeParse(raw);
+        if (guardrailParsed.success) return guardrailParsed.data;
+
+        const tasksParsed = generatedTasksResultSchema.safeParse(raw);
+        if (!tasksParsed.success) {
+          throw new Error(
+            `Task generation response did not match expected structure: ${tasksParsed.error.message}`,
+          );
+        }
+        return tasksParsed.data;
+      });
+
+      await step.run("report-progress-tasks-generated", async () => {
+        await reportWorkflowProgress(featureId, "task_generation", {
+          status: "running",
+          progressMessage: "Tasks generated, validating...",
+          progressPercent: 60,
+        });
+      });
+
+      if (isGuardrailError(result)) {
+        await step.run("save-guardrail-rejection", async () => {
+          await db
+            .update(features)
+            .set({ status: "PRD_READY", updatedAt: new Date() })
+            .where(eq(features.id, featureId));
+
+          await db.insert(notifications).values({
+            userId: feature.createdBy,
+            workspaceId: feature.workspaceId,
+            type: "task_generation_blocked",
+            title: "Task generation blocked",
+            message: result.reason,
+            featureId,
+          });
+
+          await reportWorkflowProgress(featureId, "task_generation", {
+            status: "failed",
+            progressMessage: "Task generation blocked",
+            progressPercent: 100,
+            errorMessage: result.reason,
+          });
+        });
+
+        return { status: "blocked", reason: result.reason };
+      }
+
+      await step.run("report-progress-70", async () => {
+        await reportWorkflowProgress(featureId, "task_generation", {
+          status: "running",
+          progressPercent: 70,
+        });
+      });
+
+      await step.run("save-tasks-and-notify", async () => {
+        const sorted = [...result.tasks].sort(
+          (a, b) => a.position - b.position,
+        );
+
+        await db.insert(tasks).values(
+          sorted.map((task, index) => ({
+            featureId,
+            workspaceId: feature.workspaceId,
+            title: task.title,
+            description: task.description,
+            priority: task.priority,
+            status: "TODO" as const,
+            position: index + 1,
+          })),
+        );
+
+        await db
+          .update(features)
+          .set({ status: "PLANNING", updatedAt: new Date() })
+          .where(eq(features.id, featureId));
 
         await db.insert(notifications).values({
           userId: feature.createdBy,
           workspaceId: feature.workspaceId,
-          type: "task_generation_blocked",
-          title: "Task generation blocked",
-          message: result.reason,
+          type: "tasks_ready",
+          title: "Tasks ready for review",
+          message: result.coverage_check,
           featureId,
         });
 
         await reportWorkflowProgress(featureId, "task_generation", {
-          status: "failed",
-          progressMessage: "Task generation blocked",
+          status: "completed",
+          progressMessage: "Tasks ready",
           progressPercent: 100,
-          errorMessage: result.reason,
         });
       });
 
-      return { status: "blocked", reason: result.reason };
-    }
-
-    await step.run("report-progress-70", async () => {
+      return { status: "tasks-ready", generatedBy: getLLMModel() };
+    } catch (error) {
       await reportWorkflowProgress(featureId, "task_generation", {
-        status: "running",
-        progressPercent: 70,
-      });
-    });
-
-    await step.run("save-tasks-and-notify", async () => {
-      const sorted = [...result.tasks].sort((a, b) => a.position - b.position);
-
-      await db.insert(tasks).values(
-        sorted.map((task, index) => ({
-          featureId,
-          workspaceId: feature.workspaceId,
-          title: task.title,
-          description: task.description,
-          priority: task.priority,
-          status: "TODO" as const,
-          position: index + 1,
-        })),
-      );
-
-      await db.update(features).set({ status: "PLANNING", updatedAt: new Date() }).where(eq(features.id, featureId));
-
-      await db.insert(notifications).values({
-        userId: feature.createdBy,
-        workspaceId: feature.workspaceId,
-        type: "tasks_ready",
-        title: "Tasks ready for review",
-        message: result.coverage_check,
-        featureId,
-      });
-
-      await reportWorkflowProgress(featureId, "task_generation", {
-        status: "completed",
-        progressMessage: "Tasks ready",
+        status: "failed",
+        progressMessage: "Task generation failed unexpectedly",
+        errorMessage: error instanceof Error ? error.message : String(error),
         progressPercent: 100,
       });
-    });
-
-    return { status: "tasks-ready", generatedBy: getLLMModel() };
+      throw error;
+    }
   },
 );
 
-export const taskGenerationWorkflow: InngestFunction.Any = _taskGenerationWorkflow;
+export const taskGenerationWorkflow: InngestFunction.Any =
+  _taskGenerationWorkflow;

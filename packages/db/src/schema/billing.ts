@@ -7,7 +7,7 @@ export const billingSubscriptions = pgTable("billing_subscriptions", {
   workspaceId: uuid("workspace_id")
     .notNull()
     .unique()
-    .references(() => workspaces.id),
+    .references(() => workspaces.id, { onDelete: "cascade" }),
   razorpaySubscriptionId: text("razorpay_subscription_id"),
   razorpayCustomerId: text("razorpay_customer_id"),
   plan: workspacePlanEnum("plan").notNull().default("free"),

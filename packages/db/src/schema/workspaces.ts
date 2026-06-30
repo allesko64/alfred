@@ -22,10 +22,14 @@ export const workspaces = pgTable("workspaces", {
   slug: text("slug").notNull().unique(),
   ownerId: uuid("owner_id")
     .notNull()
-    .references(() => users.id),
+    .references(() => users.id, { onDelete: "restrict" }),
   plan: workspacePlanEnum("plan").notNull().default("free"),
-  billingStatus: billingStatusEnum("billing_status").notNull().default("active"),
-  onboardingStep: onboardingStepEnum("onboarding_step").notNull().default("team"),
+  billingStatus: billingStatusEnum("billing_status")
+    .notNull()
+    .default("active"),
+  onboardingStep: onboardingStepEnum("onboarding_step")
+    .notNull()
+    .default("team"),
   buildingType: text("building_type"),
   /** AI credit balance for the current monthly cycle. Resets via cron and on plan change — see billing-limits.ts. */
   creditsRemaining: integer("credits_remaining").notNull().default(100),
@@ -39,12 +43,14 @@ export const workspaceMemberships = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
-      .references(() => users.id),
+      .references(() => users.id, { onDelete: "restrict" }),
     workspaceId: uuid("workspace_id")
       .notNull()
-      .references(() => workspaces.id),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     role: membershipRoleEnum("role").notNull(),
-    invitedBy: uuid("invited_by").references(() => users.id),
+    invitedBy: uuid("invited_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
     status: membershipStatusEnum("status").notNull().default("active"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },

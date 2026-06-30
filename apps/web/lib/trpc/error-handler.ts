@@ -13,11 +13,7 @@ export function isTRPCError(error: unknown): error is AppTRPCError {
 /** True when the error is a billing/credits exhaustion FORBIDDEN. */
 export function isBillingLimitError(error: unknown): boolean {
   if (!isTRPCError(error)) return false;
-  const msg = error.message.toLowerCase();
-  return (
-    error.data?.code === "FORBIDDEN" &&
-    (msg.includes("credits") || msg.includes("billing") || msg.includes("upgrade"))
-  );
+  return (error.data as { errorCode?: string } | undefined)?.errorCode === "BILLING_LIMIT";
 }
 
 /**

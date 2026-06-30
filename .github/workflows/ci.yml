@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: alfred
+          POSTGRES_PASSWORD: alfred
+          POSTGRES_DB: alfred_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U alfred"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://alfred:alfred@localhost:5432/alfred_test
+      DATABASE_URL_TEST: postgresql://alfred:alfred@localhost:5432/alfred_test
+      BETTER_AUTH_SECRET: test-secret-do-not-use-in-production
+      BETTER_AUTH_URL: http://localhost:3100
+      NEXT_PUBLIC_BETTER_AUTH_URL: http://localhost:3100
+      GITHUB_WEBHOOK_SECRET: test-webhook-secret
+      OPENAI_API_KEY: sk-test-key-not-used-mocked-in-tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Write root .env for drizzle-kit
+        run: echo "DATABASE_URL=$DATABASE_URL" > .env
+
+      - name: Apply DB migrations
+        run: pnpm --filter @alfred/db db:migrate
+
+      - run: pnpm run check-types
+
+      - run: pnpm run lint
+
+      - run: pnpm vitest run

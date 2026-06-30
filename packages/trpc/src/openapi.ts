@@ -11,7 +11,19 @@ export function getOpenApiDocument() {
     version: "1.0.0",
     baseUrl: "http://localhost:3000/api",
     docsUrl: "http://localhost:3000/docs",
-    tags: ["workspace", "feature", "prd", "task", "github", "review", "billing"],
+    tags: [
+      "workspace",
+      "feature",
+      "prd",
+      "task",
+      "github",
+      "review",
+      "billing",
+      "user",
+      "project",
+      "notification",
+      "changelog",
+    ],
     securitySchemes: {
       bearerAuth: {
         type: "http",

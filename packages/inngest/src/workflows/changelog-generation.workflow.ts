@@ -1,5 +1,12 @@
 import { chatCompleteJSON } from "@alfred/ai";
-import { changelog, db, features, notifications, prds, tasks } from "@alfred/db";
+import {
+  changelog,
+  db,
+  features,
+  notifications,
+  prds,
+  tasks,
+} from "@alfred/db";
 import { desc, eq } from "drizzle-orm";
 import type { InngestFunction } from "inngest";
 import { inngest } from "../client";
@@ -28,13 +35,17 @@ Respond with ONLY a valid JSON object, no markdown, no commentary:
   "entry": "string"
 }`;
 
+// changelogTypeEnum values — kept local since this is an AI output shape, not a DB type.
 interface ChangelogOut {
   type: "feature" | "fix" | "improvement";
   entry: string;
 }
 
 /** Parses "v1.2.3" and bumps minor (feature/improvement) or patch (fix). Starts at v1.0.0 if the workspace has no prior entry. */
-function nextVersion(previousVersion: string | undefined, type: ChangelogOut["type"]): string {
+function nextVersion(
+  previousVersion: string | undefined,
+  type: ChangelogOut["type"],
+): string {
   const match = /^v(\d+)\.(\d+)\.(\d+)$/.exec(previousVersion ?? "");
   if (!match) return "v1.0.0";
 
@@ -42,20 +53,36 @@ function nextVersion(previousVersion: string | undefined, type: ChangelogOut["ty
   const minor = Number(match[2]);
   const patch = Number(match[3]);
 
-  return type === "fix" ? `v${major}.${minor}.${patch + 1}` : `v${major}.${minor + 1}.0`;
+  return type === "fix"
+    ? `v${major}.${minor}.${patch + 1}`
+    : `v${major}.${minor + 1}.0`;
 }
 
 const _changelogGenerationWorkflow = inngest.createFunction(
-  { id: "feature-changelog-generation", triggers: { event: "feature/changelog-generation.requested" } },
+  {
+    id: "feature-changelog-generation",
+    triggers: { event: "feature/changelog-generation.requested" },
+  },
   async ({ event, step }) => {
     const { featureId } = event.data;
 
     const context = await step.run("fetch-context", async () => {
-      const [feature] = await db.select().from(features).where(eq(features.id, featureId)).limit(1);
+      const [feature] = await db
+        .select()
+        .from(features)
+        .where(eq(features.id, featureId))
+        .limit(1);
       if (!feature) return null;
 
-      const [prd] = await db.select().from(prds).where(eq(prds.featureId, featureId)).limit(1);
-      const taskRows = await db.select().from(tasks).where(eq(tasks.featureId, featureId));
+      const [prd] = await db
+        .select()
+        .from(prds)
+        .where(eq(prds.featureId, featureId))
+        .limit(1);
+      const taskRows = await db
+        .select()
+        .from(tasks)
+        .where(eq(tasks.featureId, featureId));
 
       const [previousEntry] = await db
         .select({ version: changelog.version })
@@ -64,7 +91,12 @@ const _changelogGenerationWorkflow = inngest.createFunction(
         .orderBy(desc(changelog.createdAt))
         .limit(1);
 
-      return { feature, prd, taskRows, previousVersion: previousEntry?.version };
+      return {
+        feature,
+        prd,
+        taskRows,
+        previousVersion: previousEntry?.version,
+      };
     });
 
     if (!context) {
@@ -82,11 +114,23 @@ const _changelogGenerationWorkflow = inngest.createFunction(
     });
 
     const generated = await step.run("generate-changelog-entry", async () => {
-      const prompt = CHANGELOG_PROMPT.replace("{{FEATURE_TITLE}}", feature.title)
-        .replace("{{PROBLEM_STATEMENT}}", prd?.problemStatement ?? "Not specified")
-        .replace("{{TASKS}}", taskRows.map((t) => `- ${t.title}`).join("\n") || "No tasks recorded");
+      const prompt = CHANGELOG_PROMPT.replace(
+        "{{FEATURE_TITLE}}",
+        feature.title,
+      )
+        .replace(
+          "{{PROBLEM_STATEMENT}}",
+          prd?.problemStatement ?? "Not specified",
+        )
+        .replace(
+          "{{TASKS}}",
+          taskRows.map((t) => `- ${t.title}`).join("\n") || "No tasks recorded",
+        );
 
-      return chatCompleteJSON<ChangelogOut>([{ role: "system", content: prompt }]);
+      const { data } = await chatCompleteJSON<ChangelogOut>([
+        { role: "system", content: prompt },
+      ]);
+      return data;
     });
 
     const version = nextVersion(previousVersion, generated.type);
@@ -120,4 +164,5 @@ const _changelogGenerationWorkflow = inngest.createFunction(
   },
 );
 
-export const changelogGenerationWorkflow: InngestFunction.Any = _changelogGenerationWorkflow;
+export const changelogGenerationWorkflow: InngestFunction.Any =
+  _changelogGenerationWorkflow;

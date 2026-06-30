@@ -7,10 +7,10 @@ export const workspaceInvites = pgTable("workspace_invites", {
   id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: uuid("workspace_id")
     .notNull()
-    .references(() => workspaces.id),
+    .references(() => workspaces.id, { onDelete: "cascade" }),
   invitedBy: uuid("invited_by")
     .notNull()
-    .references(() => users.id),
+    .references(() => users.id, { onDelete: "restrict" }),
   githubUsername: text("github_username"),
   email: text("email"),
   role: membershipRoleEnum("role").notNull(),

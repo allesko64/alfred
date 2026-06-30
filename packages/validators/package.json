@@ -12,6 +12,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@alfred/db": "workspace:*",
     "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3"
   }
 }

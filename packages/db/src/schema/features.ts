@@ -1,10 +1,4 @@
-import {
-  index,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { featureStatusEnum } from "./enums";
 import { projects } from "./projects";
 import { users } from "./users";
@@ -16,16 +10,22 @@ export const features = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     workspaceId: uuid("workspace_id")
       .notNull()
-      .references(() => workspaces.id),
-    projectId: uuid("project_id").references(() => projects.id),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id").references(() => projects.id, {
+      onDelete: "set null",
+    }),
     title: text("title").notNull(),
     originalRequest: text("original_request").notNull(),
     status: featureStatusEnum("status").notNull().default("DRAFT"),
     createdBy: uuid("created_by")
       .notNull()
-      .references(() => users.id),
-    assignedTo: uuid("assigned_to").references(() => users.id),
-    approvedBy: uuid("approved_by").references(() => users.id),
+      .references(() => users.id, { onDelete: "restrict" }),
+    assignedTo: uuid("assigned_to").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    approvedBy: uuid("approved_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
     approvedAt: timestamp("approved_at"),
     shippedAt: timestamp("shipped_at"),
     rejectedAt: timestamp("rejected_at"),

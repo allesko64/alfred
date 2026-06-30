@@ -1,5 +1,5 @@
 import { and, desc, eq } from "drizzle-orm";
-import { z } from "zod";
+import { notificationIdInputSchema } from "@alfred/validators";
 import { notifications } from "@alfred/db";
 import {
   createTRPCRouter,
@@ -34,7 +34,7 @@ export const notificationRouter = createTRPCRouter({
     }),
 
   markRead: protectedProcedure
-    .input(z.object({ notificationId: z.string().uuid() }))
+    .input(notificationIdInputSchema)
     .mutation(async ({ ctx, input }) => {
       await ctx.db
         .update(notifications)

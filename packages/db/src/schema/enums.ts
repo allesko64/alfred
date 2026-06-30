@@ -21,6 +21,7 @@ export const membershipRoleEnum = pgEnum("membership_role", [
   "reviewer",
   "viewer",
 ]);
+export type MembershipRole = (typeof membershipRoleEnum.enumValues)[number];
 
 export const membershipStatusEnum = pgEnum("membership_status", [
   "active",
@@ -46,7 +47,6 @@ export const featureStatusEnum = pgEnum("feature_status", [
   "RE_REVIEWING",
   "REVIEW_PASSED",
   "PENDING_APPROVAL",
-  "APPROVED",
   "SHIPPED",
   "REJECTED",
 ]);

@@ -7,6 +7,8 @@ import { AnimatePresence, motion } from "framer-motion"
 import { toast } from "sonner"
 import { XIcon } from "@phosphor-icons/react"
 
+import { inviteMemberSchema, membershipRoleValues } from "@alfred/validators"
+
 import { useTRPC } from "@/lib/trpc/client"
 import { Input } from "@/components/ui/input"
 import {
@@ -20,14 +22,19 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
-const ROLES = [
-  { value: "admin", label: "Admin" },
-  { value: "developer", label: "Developer" },
-  { value: "reviewer", label: "Reviewer" },
-  { value: "viewer", label: "Viewer" },
-] as const
+const ROLE_LABELS: Record<string, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  developer: "Developer",
+  reviewer: "Reviewer",
+  viewer: "Viewer",
+}
 
-type InviteRole = (typeof ROLES)[number]["value"]
+// Owners aren't invited — they're whoever created the workspace.
+const INVITABLE_ROLES = membershipRoleValues.filter((role) => role !== "owner")
+const ROLES = INVITABLE_ROLES.map((value) => ({ value, label: ROLE_LABELS[value] }))
+
+type InviteRole = (typeof INVITABLE_ROLES)[number]
 
 interface PendingInvite {
   id: string
@@ -105,15 +112,14 @@ export function TeamOnboardingClient() {
 
     setIsSubmitting(true)
     try {
-      await Promise.all(
-        pendingInvites.map((invite) =>
-          inviteMember.mutateAsync({
-            workspaceId,
-            githubUsername: invite.username,
-            role: invite.role,
-          }),
-        ),
+      const payloads = pendingInvites.map((invite) =>
+        inviteMemberSchema.parse({
+          workspaceId,
+          githubUsername: invite.username,
+          role: invite.role,
+        }),
       )
+      await Promise.all(payloads.map((payload) => inviteMember.mutateAsync(payload)))
       await completeStep.mutateAsync({ workspaceId, step: "complete" })
       router.push(`/workspace/${workspaceId}/dashboard`)
     } catch (error) {

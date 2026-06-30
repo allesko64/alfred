@@ -1,5 +1,17 @@
 import { z } from "zod";
 
+/**
+ * Shared `{ workspaceId, featureId }` shape used by the large majority of
+ * feature-scoped procedures (review, task, prd routers, etc.) so it isn't
+ * redefined inline at every call site.
+ */
+export const featureInputSchema = z.object({
+  workspaceId: z.string().uuid(),
+  featureId: z.string().uuid(),
+});
+
+export type FeatureInput = z.infer<typeof featureInputSchema>;
+
 export const createFeatureSchema = z.object({
   workspaceId: z.string().uuid(),
   projectId: z.string().uuid().optional(),

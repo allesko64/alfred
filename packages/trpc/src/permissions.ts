@@ -2,9 +2,9 @@ import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import { LRUCache } from "lru-cache";
 import { Redis } from "@upstash/redis";
-import { db, workspaceMemberships } from "@alfred/db";
+import { db, type MembershipRole, workspaceMemberships } from "@alfred/db";
 
-export type MembershipRole = "owner" | "admin" | "developer" | "reviewer" | "viewer";
+export type { MembershipRole };
 
 const ROLE_CACHE_TTL_MS = 60_000;
 
@@ -26,7 +26,7 @@ function getRedis(): Redis | null {
 }
 
 function cacheKey(userId: string, workspaceId: string) {
-  return `membership:${userId}:${workspaceId}`;
+  return `permission:${workspaceId}:${userId}`;
 }
 
 /**
@@ -98,7 +98,10 @@ export async function requireMembership(
   return role;
 }
 
-export async function invalidateMembershipCache(userId: string, workspaceId: string) {
+export async function invalidateMembershipCache(
+  userId: string,
+  workspaceId: string,
+) {
   const key = cacheKey(userId, workspaceId);
   lruCache.delete(key);
 

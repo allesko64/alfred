@@ -19,7 +19,7 @@ export const projects = pgTable("projects", {
   description: text("description"),
   createdBy: uuid("created_by")
     .notNull()
-    .references(() => users.id),
+    .references(() => users.id, { onDelete: "restrict" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -29,16 +29,19 @@ export const repositories = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     projectId: uuid("project_id")
       .notNull()
-      .references(() => projects.id),
+      .references(() => projects.id, { onDelete: "cascade" }),
     workspaceId: uuid("workspace_id")
       .notNull()
-      .references(() => workspaces.id),
-    githubRepoId: bigint("github_repo_id", { mode: "number" }).notNull().unique(),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    githubRepoId: bigint("github_repo_id", { mode: "number" })
+      .notNull()
+      .unique(),
     fullName: text("full_name").notNull(),
     owner: text("owner"),
     name: text("name"),
     defaultBranch: text("default_branch"),
     webhookId: bigint("webhook_id", { mode: "number" }),
+    webhookSecret: text("webhook_secret"),
     installationId: bigint("installation_id", { mode: "number" }).notNull(),
     isIndexed: boolean("is_indexed").notNull().default(false),
     indexedAt: timestamp("indexed_at"),

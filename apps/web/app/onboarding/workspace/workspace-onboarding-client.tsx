@@ -7,6 +7,8 @@ import { AnimatePresence, motion } from "framer-motion"
 import { toast } from "sonner"
 import { CheckCircleIcon, GithubLogoIcon, SpinnerIcon } from "@phosphor-icons/react"
 
+import { completeWorkspaceOnboardingSchema } from "@alfred/validators"
+
 import { useTRPC, useTRPCClient } from "@/lib/trpc/client"
 import { Input } from "@/components/ui/input"
 import {
@@ -99,7 +101,10 @@ export function WorkspaceOnboardingClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const canConnect = name.trim().length > 0
+  const nameValidation = completeWorkspaceOnboardingSchema
+    .pick({ name: true })
+    .safeParse({ name: name.trim() })
+  const canConnect = nameValidation.success
 
   async function handleConnect() {
     if (!canConnect || phase !== "idle") return

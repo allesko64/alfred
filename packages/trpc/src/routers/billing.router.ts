@@ -7,7 +7,7 @@ import {
   workspaces,
 } from "@alfred/db";
 import { eq } from "drizzle-orm";
-import { z } from "zod";
+import { paidPlanSchema } from "@alfred/validators";
 import { createTRPCRouter, requireWorkspaceRole, workspaceInputSchema, workspaceProcedure } from "../trpc";
 import { getRazorpayClient, getRazorpayPlanId, type PaidPlan } from "../lib/razorpay";
 
@@ -49,7 +49,7 @@ export const billingRouter = createTRPCRouter({
   /** Creates (or reuses) a Razorpay customer + subscription and returns the hosted checkout URL. */
   createCheckoutSession: workspaceProcedure
     .use(requireWorkspaceRole(["owner", "admin"]))
-    .input(workspaceInputSchema.extend({ plan: z.enum(["pro", "team"]) }))
+    .input(workspaceInputSchema.extend({ plan: paidPlanSchema }))
     .mutation(async ({ ctx, input }) => {
       if (!ctx.user) {
         throw new TRPCError({ code: "UNAUTHORIZED" });

@@ -1,4 +1,11 @@
-import { chatCompleteJSON, cosineSimilarity, embedTexts, getLLMModel, upsertPullRequestComment } from "@alfred/ai";
+import {
+  chatCompleteJSON,
+  cosineSimilarity,
+  embedTexts,
+  getLLMModel,
+  getPullRequestWithDiff,
+  upsertPullRequestComment,
+} from "@alfred/ai";
 import {
   aiReviews,
   checkAndDeductCredits,
@@ -12,7 +19,11 @@ import {
   reviewIssues,
   tasks,
 } from "@alfred/db";
-import { type ReviewIssueOut, type ReviewResultOut, reviewResultOutSchema } from "@alfred/validators";
+import {
+  type ReviewIssueOut,
+  type ReviewResultOut,
+  reviewResultOutSchema,
+} from "@alfred/validators";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { inngest } from "../client";
 import { reportWorkflowProgress } from "../workflow-runs";
@@ -236,14 +247,20 @@ Notes on the output:
   generic criticism`;
 
 /** Importance → DB severity column mapping (schema kept as BLOCKING/NON_BLOCKING to avoid a migration). */
-const IMPORTANCE_TO_SEVERITY = { critical: "BLOCKING", minor: "NON_BLOCKING" } as const;
+const IMPORTANCE_TO_SEVERITY = {
+  critical: "BLOCKING",
+  minor: "NON_BLOCKING",
+} as const;
 
 function criticalIssues(issues: ReviewIssueOut[]): ReviewIssueOut[] {
   return issues.filter((issue) => issue.importance === "critical");
 }
 
 /** Builds the GitHub PR comment deterministically in code — the model no longer generates markdown. Only the summary and critical issues are shown. */
-function formatGithubComment(reviewNumber: number, result: ReviewResultOut): string {
+function formatGithubComment(
+  reviewNumber: number,
+  result: ReviewResultOut,
+): string {
   const critical = criticalIssues(result.issues);
 
   const issuesText =
@@ -251,7 +268,9 @@ function formatGithubComment(reviewNumber: number, result: ReviewResultOut): str
       ? "No critical issues found ✅"
       : critical
           .map((issue, i) => {
-            const location = issue.file_path ? `\`${issue.file_path}\`${issue.line_number ? ` line ${issue.line_number}` : ""}` : "location unknown";
+            const location = issue.file_path
+              ? `\`${issue.file_path}\`${issue.line_number ? ` line ${issue.line_number}` : ""}`
+              : "location unknown";
             return `**${i + 1}. ${issue.title}**\n- File: ${location}\n- Related to: ${issue.related_to}\n- Suggested fix: ${issue.suggested_fix}`;
           })
           .join("\n\n");
@@ -303,7 +322,10 @@ interface DiffSection {
 }
 
 /** Decision 2: under threshold sends the raw diff; over threshold embeds chunks and keeps only the top 5 most relevant to the PRD's acceptance criteria. Embeddings here are in-memory only — never persisted. */
-async function selectDiffSection(diff: string, acceptanceCriteriaText: string): Promise<DiffSection> {
+async function selectDiffSection(
+  diff: string,
+  acceptanceCriteriaText: string,
+): Promise<DiffSection> {
   const maxLines = getMaxDiffLines();
   const lineCount = diff.split("\n").length;
 
@@ -312,25 +334,39 @@ async function selectDiffSection(diff: string, acceptanceCriteriaText: string): 
   }
 
   const chunks = chunkDiff(diff);
-  const [queryEmbedding, ...chunkEmbeddings] = await embedTexts([acceptanceCriteriaText, ...chunks]);
+  const [queryEmbedding, ...chunkEmbeddings] = await embedTexts([
+    acceptanceCriteriaText,
+    ...chunks,
+  ]);
 
   const ranked = chunks
-    .map((text, i) => ({ text, score: cosineSimilarity(queryEmbedding!, chunkEmbeddings[i]!) }))
+    .map((text, i) => ({
+      text,
+      score: cosineSimilarity(queryEmbedding!, chunkEmbeddings[i]!),
+    }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 
-  return { text: ranked.map((c) => c.text).join("\n\n---\n\n"), isLargePR: true };
+  return {
+    text: ranked.map((c) => c.text).join("\n\n---\n\n"),
+    isLargePR: true,
+  };
 }
 
 /** Decision 3: task budget is 800 tokens — over that, titles only. */
 function buildTasksText(taskRows: (typeof tasks.$inferSelect)[]): string {
-  const full = taskRows.map((t) => `- ${t.title}: ${t.description ?? ""}`).join("\n");
+  const full = taskRows
+    .map((t) => `- ${t.title}: ${t.description ?? ""}`)
+    .join("\n");
   if (estimateTokens(full) <= 800) return full;
   return taskRows.map((t) => `- ${t.title}`).join("\n");
 }
 
 /** Decision 3: codebase context budget is 1,500 tokens — over that, drop from top 5 chunks to top 3. */
-async function getCodebaseContext(repositoryId: string, queryEmbedding: number[]): Promise<string> {
+async function getCodebaseContext(
+  repositoryId: string,
+  queryEmbedding: number[],
+): Promise<string> {
   async function fetchTopChunks(limit: number) {
     const vectorLiteral = `[${queryEmbedding.join(",")}]`;
     return db
@@ -370,6 +406,7 @@ interface PerformReviewParams {
   featureId: string;
   pullRequestId: string;
   workflowType: "ai_review" | "re_review";
+  inngestRunId?: string;
 }
 
 interface PerformReviewResult {
@@ -378,12 +415,30 @@ interface PerformReviewResult {
   reviewNumber?: number;
 }
 
-export async function performReview(run: StepRun, params: PerformReviewParams): Promise<PerformReviewResult> {
+export async function performReview(
+  run: StepRun,
+  params: PerformReviewParams,
+): Promise<PerformReviewResult> {
   const { featureId, pullRequestId, workflowType } = params;
 
+  await reportWorkflowProgress(featureId, workflowType, {
+    inngestRunId: params.inngestRunId,
+    status: "running",
+    progressMessage: "Fetching review context...",
+    progressPercent: 5,
+  });
+
   const context = await run("fetch-review-context", async () => {
-    const [feature] = await db.select().from(features).where(eq(features.id, featureId)).limit(1);
-    const [pr] = await db.select().from(pullRequests).where(eq(pullRequests.id, pullRequestId)).limit(1);
+    const [feature] = await db
+      .select()
+      .from(features)
+      .where(eq(features.id, featureId))
+      .limit(1);
+    const [pr] = await db
+      .select()
+      .from(pullRequests)
+      .where(eq(pullRequests.id, pullRequestId))
+      .limit(1);
     if (!feature || !pr) return null;
 
     const [repository] = await db
@@ -391,13 +446,25 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
       .from(repositories)
       .where(eq(repositories.id, pr.repositoryId))
       .limit(1);
-    const [prd] = await db.select().from(prds).where(eq(prds.featureId, featureId)).limit(1);
-    const taskRows = await db.select().from(tasks).where(eq(tasks.featureId, featureId));
+    const [prd] = await db
+      .select()
+      .from(prds)
+      .where(eq(prds.featureId, featureId))
+      .limit(1);
+    const taskRows = await db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.featureId, featureId));
 
     const [previousReview] = await db
       .select()
       .from(aiReviews)
-      .where(and(eq(aiReviews.featureId, featureId), eq(aiReviews.isArchived, false)))
+      .where(
+        and(
+          eq(aiReviews.featureId, featureId),
+          eq(aiReviews.isArchived, false),
+        ),
+      )
       .orderBy(desc(aiReviews.reviewNumber))
       .limit(1);
 
@@ -414,17 +481,34 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
           )
       : [];
 
-    return { feature, pr, repository, prd, taskRows, previousReview, previousIssues };
+    return {
+      feature,
+      pr,
+      repository,
+      prd,
+      taskRows,
+      previousReview,
+      previousIssues,
+    };
   });
 
   if (!context || !context.repository) {
     return { status: "skipped", reason: "missing-context" };
   }
 
-  const { feature, pr, repository, prd, taskRows, previousReview, previousIssues } = context;
+  const {
+    feature,
+    pr,
+    repository,
+    prd,
+    taskRows,
+    previousReview,
+    previousIssues,
+  } = context;
 
   await run("report-progress-running", async () => {
     await reportWorkflowProgress(featureId, workflowType, {
+      inngestRunId: params.inngestRunId,
       status: "running",
       progressMessage: "Alfred is reviewing your PR...",
       progressPercent: 20,
@@ -445,7 +529,10 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
   }
 
   const credits = await run("check-and-deduct-credits", async () =>
-    checkAndDeductCredits(feature.workspaceId, workflowType === "re_review" ? "re_review" : "ai_review"),
+    checkAndDeductCredits(
+      feature.workspaceId,
+      workflowType === "re_review" ? "re_review" : "ai_review",
+    ),
   );
 
   if (!credits.allowed) {
@@ -454,7 +541,8 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
         status: "failed",
         progressMessage: "Review blocked — out of AI credits",
         progressPercent: 100,
-        errorMessage: "Out of AI credits. Upgrade or wait for your next monthly reset.",
+        errorMessage:
+          "Out of AI credits. Upgrade or wait for your next monthly reset.",
       });
 
       await db.insert(notifications).values({
@@ -462,7 +550,8 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
         workspaceId: feature.workspaceId,
         type: "review_blocked",
         title: "AI review blocked",
-        message: "Out of AI credits. Upgrade or wait for your next monthly reset.",
+        message:
+          "Out of AI credits. Upgrade or wait for your next monthly reset.",
         featureId,
       });
     });
@@ -470,16 +559,55 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
   }
 
   const reviewNumber = (previousReview?.reviewNumber ?? 0) + 1;
-  const acceptanceCriteriaText = buildAcceptanceCriteriaText(prd.acceptanceCriteria);
+  const acceptanceCriteriaText = buildAcceptanceCriteriaText(
+    prd.acceptanceCriteria,
+  );
 
-  const { diffSection, queryEmbedding } = await run("prepare-diff-and-embedding", async () => {
-    const diff = pr.diff ?? "";
-    const [section, [queryEmbedding]] = await Promise.all([
-      selectDiffSection(diff, acceptanceCriteriaText),
-      embedTexts([acceptanceCriteriaText]),
-    ]);
-    return { diffSection: section, queryEmbedding: queryEmbedding! };
+  await run("report-progress-fetching-diff", async () => {
+    await reportWorkflowProgress(featureId, workflowType, {
+      progressPercent: 30,
+      progressMessage: "Fetching latest PR diff...",
+    });
   });
+
+  const { diffSection, queryEmbedding } = await run(
+    "prepare-diff-and-embedding",
+    async () => {
+      // Item 9.2 / 23: the cached `pull_requests.diff` column can be stale —
+      // re-fetch the diff fresh from GitHub at review time so the review is
+      // always graded against the PR's current state, not whatever was last
+      // ingested. The fresh diff is written back to the DB column so other
+      // readers (UI, future re-reviews before the next webhook) still see it.
+      let diff = pr.diff ?? "";
+      const [owner, name] = repository.fullName.split("/");
+      if (owner && name && pr.githubPrNumber) {
+        try {
+          const fresh = await getPullRequestWithDiff(
+            repository.installationId,
+            repository.owner ?? owner,
+            repository.name ?? name,
+            pr.githubPrNumber,
+          );
+          diff = fresh.diff ?? diff;
+
+          await db
+            .update(pullRequests)
+            .set({ diff, updatedAt: new Date() })
+            .where(eq(pullRequests.id, pullRequestId));
+        } catch (error) {
+          // Fall back to the cached diff rather than failing the whole review
+          // if GitHub is temporarily unreachable.
+          console.error("Failed to re-fetch fresh PR diff, using cached diff", error);
+        }
+      }
+
+      const [section, [queryEmbedding]] = await Promise.all([
+        selectDiffSection(diff, acceptanceCriteriaText),
+        embedTexts([acceptanceCriteriaText]),
+      ]);
+      return { diffSection: section, queryEmbedding: queryEmbedding! };
+    },
+  );
 
   if (!diffSection.text) {
     await run("save-no-diff-rejection", async () => {
@@ -498,32 +626,53 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
   });
 
   await run("report-progress-calling-model", async () => {
-    await reportWorkflowProgress(featureId, workflowType, { progressPercent: 60 });
+    await reportWorkflowProgress(featureId, workflowType, {
+      progressPercent: 60,
+    });
   });
 
   const result = await run("call-claude-for-review", async () => {
-    const prompt = AI_REVIEW_SYSTEM_PROMPT.replace("{{FEATURE_TITLE}}", feature.title)
+    const prompt = AI_REVIEW_SYSTEM_PROMPT.replace(
+      "{{FEATURE_TITLE}}",
+      feature.title,
+    )
       .replace("{{ACCEPTANCE_CRITERIA}}", acceptanceCriteriaText)
       .replace("{{TASKS}}", buildTasksText(taskRows))
       .replace("{{PR_DIFF}}", diffSection.text || "")
       .replace("{{CODEBASE_CONTEXT}}", codebaseContext)
-      .replace("{{PREVIOUS_REVIEW_ISSUES}}", formatPreviousIssues(previousReview, previousIssues))
+      .replace(
+        "{{PREVIOUS_REVIEW_ISSUES}}",
+        formatPreviousIssues(previousReview, previousIssues),
+      )
       .replace(
         "{{LARGE_PR_NOTICE}}",
-        diffSection.isLargePR ? "This PR's diff exceeded the review size threshold." : "",
+        diffSection.isLargePR
+          ? "This PR's diff exceeded the review size threshold."
+          : "",
       );
 
-    const raw = await chatCompleteJSON<unknown>([{ role: "system", content: prompt }]);
+    const { data: raw, tokensUsed } = await chatCompleteJSON<unknown>([
+      { role: "system", content: prompt },
+    ]);
     const parsed = reviewResultOutSchema.safeParse(raw);
     if (!parsed.success) {
-      throw new Error(`AI review response did not match expected structure: ${parsed.error.message}`);
+      throw new Error(
+        `AI review response did not match expected structure: ${parsed.error.message}`,
+      );
     }
-    return parsed.data;
+    return { ...parsed.data, tokensUsed };
   });
 
   const critical = criticalIssues(result.issues);
   const minorCount = result.issues.length - critical.length;
   const githubComment = formatGithubComment(reviewNumber, result);
+
+  await run("report-progress-saving-review", async () => {
+    await reportWorkflowProgress(featureId, workflowType, {
+      progressPercent: 85,
+      progressMessage: "Saving review results...",
+    });
+  });
 
   const savedReview = await run("save-review-and-issues", async () => {
     // Decision 6: edit the existing PR comment on re-review instead of creating a new one.
@@ -540,13 +689,16 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
         blockingCount: critical.length,
         nonBlockingCount: minorCount,
         modelUsed: result.generated_by || getLLMModel(),
+        tokensUsed: result.tokensUsed,
         isLargePR: diffSection.isLargePR,
       })
       .returning();
 
     if (!saved) throw new Error("Failed to save AI review");
 
-    const previousTitles = new Set(previousIssues.map((issue) => issue.title.toLowerCase()));
+    const previousTitles = new Set(
+      previousIssues.map((issue) => issue.title.toLowerCase()),
+    );
 
     if (result.issues.length > 0) {
       await db.insert(reviewIssues).values(
@@ -560,7 +712,9 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
           prdRequirementViolated: issue.related_to,
           suggestedFix: issue.suggested_fix,
           isResolved: false,
-          carriedOverFromReviewNumber: previousTitles.has(issue.title.toLowerCase())
+          carriedOverFromReviewNumber: previousTitles.has(
+            issue.title.toLowerCase(),
+          )
             ? (previousReview?.reviewNumber ?? null)
             : null,
         })),
@@ -569,7 +723,9 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
 
     // Decision 5: previous critical issues not re-flagged this round are resolved.
     if (previousIssues.length > 0) {
-      const stillPresentTitles = new Set(critical.map((issue) => issue.title.toLowerCase()));
+      const stillPresentTitles = new Set(
+        critical.map((issue) => issue.title.toLowerCase()),
+      );
       const resolvedIssueIds = previousIssues
         .filter((issue) => !stillPresentTitles.has(issue.title.toLowerCase()))
         .map((issue) => issue.id);
@@ -583,6 +739,13 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
     }
 
     return { ...saved, existingCommentId };
+  });
+
+  await run("report-progress-posting-comment", async () => {
+    await reportWorkflowProgress(featureId, workflowType, {
+      progressPercent: 95,
+      progressMessage: "Posting review comment to GitHub...",
+    });
   });
 
   await run("post-github-comment", async () => {
@@ -599,7 +762,10 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
         savedReview.existingCommentId,
       );
 
-      await db.update(aiReviews).set({ githubCommentId: commentId }).where(eq(aiReviews.id, savedReview.id));
+      await db
+        .update(aiReviews)
+        .set({ githubCommentId: commentId })
+        .where(eq(aiReviews.id, savedReview.id));
     } catch (error) {
       // Decision 6: comment posting failures never fail the review — it's already saved to the DB.
       console.error("Failed to post GitHub PR review comment", error);
@@ -607,15 +773,20 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
   });
 
   await run("finalize-feature-status-and-notify", async () => {
-    const newStatus = critical.length > 0 ? "CHANGES_REQUESTED" : "REVIEW_PASSED";
+    const newStatus =
+      critical.length > 0 ? "CHANGES_REQUESTED" : "REVIEW_PASSED";
 
-    await db.update(features).set({ status: newStatus, updatedAt: new Date() }).where(eq(features.id, featureId));
+    await db
+      .update(features)
+      .set({ status: newStatus, updatedAt: new Date() })
+      .where(eq(features.id, featureId));
 
     await db.insert(notifications).values({
       userId: feature.createdBy,
       workspaceId: feature.workspaceId,
       type: "review_complete",
-      title: critical.length > 0 ? "Review found critical issues" : "Review passed",
+      title:
+        critical.length > 0 ? "Review found critical issues" : "Review passed",
       message: result.summary,
       featureId,
     });
@@ -629,7 +800,10 @@ export async function performReview(run: StepRun, params: PerformReviewParams): 
 
   if (critical.length === 0) {
     await run("trigger-release-readiness-check", async () => {
-      await inngest.send({ name: "feature/release-readiness.requested", data: { featureId } });
+      await inngest.send({
+        name: "feature/release-readiness.requested",
+        data: { featureId },
+      });
     });
   }
 

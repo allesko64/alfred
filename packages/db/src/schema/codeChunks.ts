@@ -1,4 +1,12 @@
-import { index, integer, pgTable, text, timestamp, uuid, vector } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  vector,
+} from "drizzle-orm/pg-core";
 import { repositories } from "./projects";
 import { workspaces } from "./workspaces";
 
@@ -8,10 +16,10 @@ export const codeChunks = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     repositoryId: uuid("repository_id")
       .notNull()
-      .references(() => repositories.id),
+      .references(() => repositories.id, { onDelete: "cascade" }),
     workspaceId: uuid("workspace_id")
       .notNull()
-      .references(() => workspaces.id),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     filePath: text("file_path").notNull(),
     chunkIndex: integer("chunk_index"),
     content: text("content").notNull(),

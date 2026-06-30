@@ -2,6 +2,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import { type OpenApiMeta } from "trpc-to-openapi";
 import superjson from "superjson";
 import { z } from "zod";
+import { ZodError } from "zod";
 import type { Context } from "./context";
 import { type MembershipRole, requireMembership } from "./permissions";
 
@@ -11,14 +12,33 @@ const t = initTRPC
   .create({
     transformer: superjson,
     errorFormatter({ shape, error }) {
+      // Extract top-level Zod field name (first failing path segment) for
+      // client-side per-field error display.
+      const field =
+        error.cause instanceof ZodError
+          ? (error.cause.errors[0]?.path.join(".") || undefined)
+          : undefined;
+
+      // Billing-limit errors are tagged via `cause` (TRPCError's `code` must
+      // stay one of tRPC's standard codes) so the client can distinguish them
+      // from generic FORBIDDEN responses without string-matching messages.
+      const billingLimit =
+        (error.cause as { billingLimit?: boolean } | undefined)
+          ?.billingLimit === true;
+      const errorCode = billingLimit ? "BILLING_LIMIT" : undefined;
+
+      // Clean envelope per the audit: `{ code, message, field? }`, plus the
+      // `httpStatus` tRPC's HTTP transport needs from the default shape —
+      // deliberately not spreading the rest of the default `shape`/`shape.data`.
       return {
-        ...shape,
+        code: shape.code,
+        message: shape.message,
         data: {
-          ...shape.data,
-          // Normalise the code onto the top-level shape so clients can read
-          // `error.data.code` without digging through the nested data object.
           code: error.code,
           httpStatus: shape.data?.httpStatus,
+          path: shape.data?.path,
+          field,
+          errorCode,
         },
       };
     },

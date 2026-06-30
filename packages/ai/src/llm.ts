@@ -19,7 +19,7 @@ export function getLLMClient(): OpenAI {
 }
 
 export function getLLMModel(): string {
-  return process.env.OPENAI_MODEL ?? "gpt-5.4-mini";
+  return process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 }
 
 export interface ChatMessage {
@@ -27,8 +27,15 @@ export interface ChatMessage {
   content: string;
 }
 
-/** Plain-text chat completion. */
-export async function chatComplete(messages: ChatMessage[]): Promise<string> {
+export interface ChatCompletionResult {
+  content: string;
+  tokensUsed: number;
+}
+
+/** Plain-text chat completion. Returns the message content and token usage. */
+export async function chatComplete(
+  messages: ChatMessage[],
+): Promise<ChatCompletionResult> {
   const response = await getLLMClient().chat.completions.create({
     model: getLLMModel(),
     messages,
@@ -38,16 +45,26 @@ export async function chatComplete(messages: ChatMessage[]): Promise<string> {
   if (!content) {
     throw new Error("LLM returned an empty response");
   }
-  return content;
+  return { content, tokensUsed: response.usage?.total_tokens ?? 0 };
+}
+
+export interface JSONCompletionResult<T> {
+  data: T;
+  tokensUsed: number;
 }
 
 /** Chat completion that strictly parses the response as JSON of shape T. Retries once with a stricter prompt if parsing fails. */
-export async function chatCompleteJSON<T>(messages: ChatMessage[]): Promise<T> {
-  const raw = await chatComplete(messages);
+export async function chatCompleteJSON<T>(
+  messages: ChatMessage[],
+): Promise<JSONCompletionResult<T>> {
+  const first = await chatComplete(messages);
   try {
-    return JSON.parse(stripCodeFence(raw)) as T;
+    return {
+      data: JSON.parse(stripCodeFence(first.content)) as T,
+      tokensUsed: first.tokensUsed,
+    };
   } catch {
-    const retryRaw = await chatComplete([
+    const retry = await chatComplete([
       ...messages,
       {
         role: "user",
@@ -55,7 +72,10 @@ export async function chatCompleteJSON<T>(messages: ChatMessage[]): Promise<T> {
           "Your previous response was not valid JSON. Respond with ONLY the raw JSON object — no markdown code fences, no commentary, no extra text before or after.",
       },
     ]);
-    return JSON.parse(stripCodeFence(retryRaw)) as T;
+    return {
+      data: JSON.parse(stripCodeFence(retry.content)) as T,
+      tokensUsed: first.tokensUsed + retry.tokensUsed,
+    };
   }
 }
 

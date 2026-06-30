@@ -4,12 +4,16 @@ import {
   completeOnboardingStepSchema,
   createWorkspaceSchema,
   inviteMemberSchema,
+  membershipRoleValues,
 } from "@alfred/validators";
 import { and, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import {
+  ACTIVE_STATUSES,
   checkBillingLimit,
   features,
+  IN_REVIEW_STATUSES,
+  membershipRoleEnum,
   PLAN_CREDITS,
   users,
   workspaceInvites,
@@ -23,27 +27,28 @@ import {
   workspaceInputSchema,
   workspaceProcedure,
 } from "../trpc";
+import { invalidateMembershipCache } from "../permissions";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-const ACTIVE_STATUSES = [
-  "CLARIFYING",
-  "PRD_GENERATION",
-  "PRD_READY",
-  "TASK_GENERATION",
-  "PLANNING",
-  "IN_DEVELOPMENT",
+// Derive enum values directly from the DB enum — no manual duplication.
+const workspacePlanValues = ["free", "pro", "team"] as const;
+const billingStatusValues = [
+  "active",
+  "past_due",
+  "cancelled",
+  "trialing",
 ] as const;
-const IN_REVIEW_STATUSES = ["REVIEWING", "RE_REVIEWING"] as const;
+const onboardingStepValues = ["team", "complete"] as const;
 
 const workspaceOutputSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   slug: z.string(),
   ownerId: z.string().uuid(),
-  plan: z.enum(["free", "pro", "team"]),
-  billingStatus: z.enum(["active", "past_due", "cancelled", "trialing"]),
-  onboardingStep: z.enum(["team", "complete"]),
+  plan: z.enum(workspacePlanValues),
+  billingStatus: z.enum(billingStatusValues),
+  onboardingStep: z.enum(onboardingStepValues),
   buildingType: z.string().nullable(),
   creditsRemaining: z.number(),
   creditsResetAt: z.date(),
@@ -125,9 +130,9 @@ export const workspaceRouter = createTRPCRouter({
           id: z.string().uuid(),
           name: z.string(),
           slug: z.string(),
-          plan: z.enum(["free", "pro", "team"]),
-          onboardingStep: z.enum(["team", "complete"]),
-          role: z.enum(["owner", "admin", "developer", "reviewer", "viewer"]),
+          plan: z.enum(workspacePlanValues),
+          onboardingStep: z.enum(onboardingStepValues),
+          role: z.enum(membershipRoleEnum.enumValues),
         }),
       ),
     )
@@ -261,6 +266,73 @@ export const workspaceRouter = createTRPCRouter({
       return workspace;
     }),
 
+  removeMember: workspaceProcedure
+    .use(requireWorkspaceRole(["owner", "admin"]))
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        memberId: z.string().uuid(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.user) {
+        throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
+
+      // Prevent the workspace owner from removing themselves.
+      if (ctx.user.id === input.memberId && ctx.role === "owner") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Workspace owners cannot remove themselves.",
+        });
+      }
+
+      await ctx.db
+        .delete(workspaceMemberships)
+        .where(
+          and(
+            eq(workspaceMemberships.workspaceId, ctx.workspaceId),
+            eq(workspaceMemberships.userId, input.memberId),
+          ),
+        );
+
+      await invalidateMembershipCache(input.memberId, ctx.workspaceId);
+      return { ok: true };
+    }),
+
+  updateMemberRole: workspaceProcedure
+    .use(requireWorkspaceRole(["owner", "admin"]))
+    .input(
+      z.object({
+        workspaceId: z.string().uuid(),
+        memberId: z.string().uuid(),
+        role: z.enum(membershipRoleValues),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // "owner" role can only be set at workspace creation — not reassigned.
+      if (input.role === "owner") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message:
+            "The owner role cannot be assigned after workspace creation.",
+        });
+      }
+
+      await ctx.db
+        .update(workspaceMemberships)
+        .set({ role: input.role })
+        .where(
+          and(
+            eq(workspaceMemberships.workspaceId, ctx.workspaceId),
+            eq(workspaceMemberships.userId, input.memberId),
+          ),
+        );
+
+      await invalidateMembershipCache(input.memberId, ctx.workspaceId);
+      return { ok: true };
+    }),
+
   inviteMember: workspaceProcedure
     .use(requireWorkspaceRole(["owner", "admin"]))
     .input(inviteMemberSchema)
@@ -275,6 +347,7 @@ export const workspaceRouter = createTRPCRouter({
           code: "FORBIDDEN",
           message:
             "You've reached your plan's team member limit. Upgrade for more.",
+          cause: { billingLimit: true },
         });
       }
 
