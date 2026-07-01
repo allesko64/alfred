@@ -109,10 +109,13 @@ export function TopBar({ title, workspaceId }: { title: string; workspaceId: str
         </GooDropdown>
         <ThemeToggle size="icon-sm" />
         <StatefulButton
-          className="min-w-0 px-4 py-1.5 text-sm"
+          className="min-w-0 whitespace-nowrap px-4 py-1.5 text-sm"
           onClick={() => router.push(`/workspace/${workspaceId}/features/new`)}
         >
           New Feature
+          <kbd className="ml-2 rounded border border-primary-foreground/30 bg-primary-foreground/10 px-1 py-0.5 text-[10px] font-normal">
+            N
+          </kbd>
         </StatefulButton>
       </div>
     </div>

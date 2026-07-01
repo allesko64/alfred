@@ -57,7 +57,14 @@ export function NewFeatureChatClient() {
   const featureQuery = useQuery(
     trpc.feature.getById.queryOptions(
       { workspaceId, featureId: featureId! },
-      { enabled: !!featureId, refetchInterval: shouldPoll ? 2000 : false },
+      {
+        enabled: !!featureId,
+        refetchInterval: (query) => {
+          const status = query.state.data?.status
+          if (!status || status === "DRAFT" || status === "CLARIFYING" || status === "PRD_GENERATION") return 2000
+          return false
+        },
+      },
     ),
   )
 

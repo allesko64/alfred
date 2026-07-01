@@ -16,9 +16,7 @@ import { useTRPC } from "@/lib/trpc/client"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { StatusBadge } from "@/components/workspace/dashboard/status-dot"
-import { AlfredAvatar } from "@/components/workspace/conversation"
 import { Button as StatefulButton } from "@/components/ui/stateful-button"
 import { useSetFeatureHeaderAction } from "@/components/workspace/feature-detail/feature-header-actions"
 import {
@@ -271,15 +269,14 @@ export function ReviewClient() {
   if (!pr) {
     return (
       <div className="flex w-full flex-col items-center gap-4 py-16 text-center">
-        <AlfredAvatar />
-        <span className="text-sm font-medium text-foreground">Link a pull request to start the AI review</span>
+        <span className="text-base font-medium text-foreground">Link a pull request to start the AI review</span>
 
         {!isLinking ? (
-          <Button onClick={() => setIsLinking(true)}>Link PR</Button>
+          <Button className="text-base" onClick={() => setIsLinking(true)}>Link PR</Button>
         ) : (
           <div className="flex w-full items-center gap-2">
             <Select value={selectedPRId} onValueChange={setSelectedPRId}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="w-full text-base">
                 <SelectValue placeholder="Choose an open PR" />
               </SelectTrigger>
               <SelectContent>
@@ -295,6 +292,7 @@ export function ReviewClient() {
               </SelectContent>
             </Select>
             <Button
+              className="text-base"
               disabled={!selectedPRId || linkPullRequest.isPending}
               onClick={() =>
                 selectedPRId && linkPullRequest.mutate({ workspaceId, featureId, pullRequestId: selectedPRId })
@@ -361,14 +359,15 @@ export function ReviewClient() {
       )}
 
       {!isPending && isRunning && (
-        <div className="flex w-full items-center gap-4 rounded-lg bg-muted px-4 py-4">
-          <AlfredAvatar pulse />
-          <div className="flex flex-1 flex-col gap-2">
-            <span className="text-sm text-foreground">
-              {workflowStatus?.progressMessage ?? "Alfred is reviewing your PR..."}
-            </span>
-            <Progress value={workflowStatus?.progressPercent ?? 20} />
+        <div className="flex w-full items-center gap-3 rounded-lg bg-muted px-4 py-4">
+          <div className="flex items-center gap-1">
+            <span className="size-1.5 animate-bounce rounded-full bg-foreground [animation-delay:-0.3s]" />
+            <span className="size-1.5 animate-bounce rounded-full bg-foreground [animation-delay:-0.15s]" />
+            <span className="size-1.5 animate-bounce rounded-full bg-foreground" />
           </div>
+          <span className="text-sm text-foreground">
+            {workflowStatus?.progressMessage ?? "Alfred is reviewing your PR..."}
+          </span>
         </div>
       )}
 

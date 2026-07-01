@@ -25,9 +25,10 @@ jobs:
           BETTER_AUTH_SECRET: "placeholder"
           BETTER_AUTH_URL: "http://localhost:3000"
           NEXT_PUBLIC_BETTER_AUTH_URL: "http://localhost:3000"
+          NEXT_PUBLIC_APP_URL: "http://localhost:3000"
           NODE_OPTIONS: "--max-old-space-size=3072"
 
- deploy:
+  deploy:
     needs: build-and-typecheck
     runs-on: ubuntu-latest
     steps:
@@ -37,6 +38,8 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          request_pty: true
           script: |
             set -e
             export PATH="/root/.nvm/versions/node/v20.20.2/bin:$PATH"
@@ -48,3 +51,6 @@ jobs:
             pnpm --filter @alfred/db db:migrate
             pnpm run build
             pm2 reload alfred-web --update-env
+            pm2 save
+            sleep 8
+            pm2 list | grep alfred-web | grep online

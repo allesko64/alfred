@@ -1,15 +1,13 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "framer-motion"
 import { CheckCircleIcon } from "@phosphor-icons/react"
 
 import { useTRPC } from "@/lib/trpc/client"
-import { Progress } from "@/components/ui/progress"
-import { AlfredLogo } from "@/components/icons/alfred-logo"
-import { LoaderFive } from "@/components/ui/loader"
+import { LoaderOne } from "@/components/ui/loader"
 import { Button as StatefulButton } from "@/components/ui/stateful-button"
 import { useSetFeatureHeaderAction } from "@/components/workspace/feature-detail/feature-header-actions"
 import { KanbanBoard } from "@/components/workspace/feature-detail/kanban/kanban-board"
@@ -18,6 +16,7 @@ import type { TaskStatus } from "@/components/workspace/feature-detail/kanban/ty
 
 export function TasksClient() {
   const { workspaceId, featureId } = useParams<{ workspaceId: string; featureId: string }>()
+  const router = useRouter()
   const trpc = useTRPC()
   const queryClient = useQueryClient()
 
@@ -97,21 +96,18 @@ export function TasksClient() {
 
     if (previousStatus !== undefined && previousStatus !== "IN_DEVELOPMENT" && isApproved) {
       setShowApproved(true)
-      const timeout = setTimeout(() => setShowApproved(false), 1400)
+      const timeout = setTimeout(() => {
+        router.push(`/workspace/${workspaceId}/features/${featureId}/review`)
+      }, 1400)
       return () => clearTimeout(timeout)
     }
-  }, [feature, isApproved])
+  }, [feature, isApproved, featureId, router, workspaceId])
 
   if (isGeneratingTasks || tasksQuery.isLoading) {
     return (
       <div className="flex max-w-[700px] flex-col items-center gap-4 py-16 text-center">
-        <div className="flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground animate-pulse">
-          <AlfredLogo className="size-6" />
-        </div>
-        <div className="flex w-full flex-col gap-2">
-          <LoaderFive text={progress?.progressMessage ?? "Alfred is breaking down tasks..."} />
-          <Progress value={progress?.progressPercent ?? 20} />
-        </div>
+        <LoaderOne />
+        <p className="text-sm text-muted-foreground">{progress?.progressMessage ?? "Alfred is breaking down tasks..."}</p>
       </div>
     )
   }

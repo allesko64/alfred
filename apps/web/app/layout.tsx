@@ -29,7 +29,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${jetbrainsMono.variable}`}>
       <body>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
           <TRPCReactProvider>
             <GlobalThemeToggle />
             {children}

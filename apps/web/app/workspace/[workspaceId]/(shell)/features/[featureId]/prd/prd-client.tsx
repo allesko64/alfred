@@ -7,10 +7,8 @@ import { AnimatePresence, motion } from "framer-motion"
 import { CheckCircleIcon, WarningCircleIcon } from "@phosphor-icons/react"
 
 import { useTRPC } from "@/lib/trpc/client"
-import { Progress } from "@/components/ui/progress"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { AlfredLogo } from "@/components/icons/alfred-logo"
-import { LoaderFive, LoaderOne } from "@/components/ui/loader"
+import { LoaderOne } from "@/components/ui/loader"
 import { Button as StatefulButton } from "@/components/ui/stateful-button"
 import { useSetFeatureHeaderAction } from "@/components/workspace/feature-detail/feature-header-actions"
 
@@ -190,13 +188,8 @@ export function PRDClient() {
   if (isWritingPRD || !prd) {
     return (
       <div className="flex max-w-[700px] flex-col items-center gap-4 py-16 text-center">
-        <div className="flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground animate-pulse">
-          <AlfredLogo className="size-6" />
-        </div>
-        <div className="flex w-full flex-col gap-2">
-          <LoaderFive text={progress?.progressMessage ?? "Alfred is writing your PRD..."} />
-          <Progress value={progress?.progressPercent ?? 10} />
-        </div>
+        <LoaderOne />
+        <p className="text-sm text-muted-foreground">{progress?.progressMessage ?? "Alfred is writing your PRD..."}</p>
       </div>
     )
   }

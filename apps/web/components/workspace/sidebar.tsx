@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -27,15 +28,16 @@ import { Badge } from "@/components/ui/badge";
 import { GooDropdown } from "@/components/ui/goo-dropdown";
 
 const NAV_ITEMS = [
-  { label: "Dashboard", icon: HouseIcon, segment: "dashboard" },
+  { label: "Dashboard", icon: HouseIcon, segment: "dashboard", shortcut: "G D" },
   {
     label: "Features",
     icon: SparkleIcon,
     segment: "features",
     color: PHASE_COLORS.amber,
+    shortcut: "G F",
   },
-  { label: "GitHub", icon: GithubLogoIcon, segment: "github" },
-  { label: "Changelog", icon: ScrollIcon, segment: "changelog" },
+  { label: "GitHub", icon: GithubLogoIcon, segment: "github", shortcut: "G H" },
+  { label: "Changelog", icon: ScrollIcon, segment: "changelog", shortcut: "G C" },
 ] as const;
 
 const BOTTOM_ITEMS = [
@@ -49,12 +51,14 @@ function NavLink({
   icon: Icon,
   isActive,
   color,
+  shortcut,
 }: {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   isActive: boolean;
   color?: string;
+  shortcut?: string;
 }) {
   return (
     <Link
@@ -84,7 +88,19 @@ function NavLink({
         />
       )}
       <Icon className="size-4" />
-      {label}
+      <span className="flex-1">{label}</span>
+      {shortcut && (
+        <span className="flex items-center gap-0.5">
+          {shortcut.split(" ").map((key) => (
+            <kbd
+              key={key}
+              className="rounded border border-border bg-muted px-1 py-0.5 text-[10px] font-normal text-muted-foreground"
+            >
+              {key}
+            </kbd>
+          ))}
+        </span>
+      )}
     </Link>
   );
 }
@@ -97,6 +113,48 @@ export function Sidebar({ workspaceId }: { workspaceId: string }) {
 
   const { data: workspaces } = useQuery(trpc.workspace.list.queryOptions());
   const currentWorkspace = workspaces?.find((w) => w.id === workspaceId);
+
+  const pendingGRef = useRef(false);
+  const gTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      const key = e.key.toLowerCase();
+
+      if (pendingGRef.current) {
+        pendingGRef.current = false;
+        if (gTimeoutRef.current) clearTimeout(gTimeoutRef.current);
+
+        const segments: Record<string, string> = { d: "dashboard", f: "features", h: "github", c: "changelog" };
+        if (segments[key]) {
+          e.preventDefault();
+          router.push(`/workspace/${workspaceId}/${segments[key]}`);
+        }
+        return;
+      }
+
+      if (key === "g") {
+        pendingGRef.current = true;
+        gTimeoutRef.current = setTimeout(() => { pendingGRef.current = false; }, 1000);
+        return;
+      }
+
+      if (key === "n") {
+        e.preventDefault();
+        router.push(`/workspace/${workspaceId}/features/new`);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (gTimeoutRef.current) clearTimeout(gTimeoutRef.current);
+    };
+  }, [workspaceId, router]);
 
   const onSignOut = async () => {
     await signOut();
@@ -175,6 +233,7 @@ export function Sidebar({ workspaceId }: { workspaceId: string }) {
               icon={item.icon}
               isActive={pathname.startsWith(href)}
               color={"color" in item ? item.color : undefined}
+              shortcut={item.shortcut}
             />
           );
         })}
