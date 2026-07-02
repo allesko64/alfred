@@ -20,3 +20,15 @@ export const approvePRDSchema = z.object({
 });
 
 export type ApprovePRDInput = z.infer<typeof approvePRDSchema>;
+
+export const updatePRDSchema = z.object({
+  featureId: z.string().uuid(),
+  problemStatement: z.string().min(1),
+  goals: z.array(z.string()).default([]),
+  nonGoals: z.array(z.string()).default([]),
+  userStories: z.array(z.string()).default([]),
+  acceptanceCriteria: z.array(z.string()).default([]),
+  assumptions: z.array(z.string()).default([]),
+});
+
+export type UpdatePRDInput = z.infer<typeof updatePRDSchema>;

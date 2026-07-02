@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "framer-motion"
 import { toast } from "sonner"
-import { CheckCircleIcon, GithubLogoIcon, SpinnerIcon } from "@phosphor-icons/react"
+import { CheckCircleIcon, GithubLogoIcon, SpinnerIcon, WarningCircleIcon } from "@phosphor-icons/react"
 
 import { completeWorkspaceOnboardingSchema } from "@alfred/validators"
 
@@ -47,6 +47,8 @@ export function WorkspaceOnboardingClient() {
   const hasHandledReturn = useRef(false)
 
   const completeOnboarding = useMutation(trpc.github.completeWorkspaceOnboarding.mutationOptions())
+  const creationLimitQuery = useQuery(trpc.workspace.checkCreationLimit.queryOptions())
+  const isAtWorkspaceLimit = creationLimitQuery.data?.allowed === false
 
   useEffect(() => {
     if (hasHandledReturn.current) return
@@ -104,7 +106,7 @@ export function WorkspaceOnboardingClient() {
   const nameValidation = completeWorkspaceOnboardingSchema
     .pick({ name: true })
     .safeParse({ name: name.trim() })
-  const canConnect = nameValidation.success
+  const canConnect = nameValidation.success && !isAtWorkspaceLimit
 
   async function handleConnect() {
     if (!canConnect || phase !== "idle") return
@@ -165,6 +167,21 @@ export function WorkspaceOnboardingClient() {
             className="surface-card w-full max-w-md p-6 md:p-8"
           >
             <FieldGroup>
+              {isAtWorkspaceLimit && (
+                <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 px-4 py-4">
+                  <WarningCircleIcon className="mt-0.5 size-4 shrink-0 text-warning" />
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-medium text-warning">
+                      You&apos;ve reached your workspace limit
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      Your plan allows {creationLimitQuery.data?.limit} workspace
+                      {creationLimitQuery.data?.limit === 1 ? "" : "s"}. Upgrade an existing
+                      workspace to create more.
+                    </span>
+                  </div>
+                </div>
+              )}
               <Field>
                 <FieldLabel htmlFor="workspace-name">Workspace name</FieldLabel>
                 <Input
@@ -209,7 +226,11 @@ export function WorkspaceOnboardingClient() {
                     <TooltipTrigger render={<span className="block w-full" />}>
                       {connectButton}
                     </TooltipTrigger>
-                    <TooltipContent>Fill in your workspace name first</TooltipContent>
+                    <TooltipContent>
+                      {isAtWorkspaceLimit
+                        ? "You've reached your workspace limit"
+                        : "Fill in your workspace name first"}
+                    </TooltipContent>
                   </Tooltip>
                 )}
                 <FieldDescription>

@@ -16,26 +16,32 @@ import {
 } from "./enums";
 import { users } from "./users";
 
-export const workspaces = pgTable("workspaces", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
-  ownerId: uuid("owner_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "restrict" }),
-  plan: workspacePlanEnum("plan").notNull().default("free"),
-  billingStatus: billingStatusEnum("billing_status")
-    .notNull()
-    .default("active"),
-  onboardingStep: onboardingStepEnum("onboarding_step")
-    .notNull()
-    .default("team"),
-  buildingType: text("building_type"),
-  /** AI credit balance for the current monthly cycle. Resets via cron and on plan change — see billing-limits.ts. */
-  creditsRemaining: integer("credits_remaining").notNull().default(100),
-  creditsResetAt: timestamp("credits_reset_at").notNull().defaultNow(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+export const workspaces = pgTable(
+  "workspaces",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    plan: workspacePlanEnum("plan").notNull().default("free"),
+    billingStatus: billingStatusEnum("billing_status")
+      .notNull()
+      .default("active"),
+    onboardingStep: onboardingStepEnum("onboarding_step")
+      .notNull()
+      .default("team"),
+    buildingType: text("building_type"),
+    /** AI credit balance for the current monthly cycle. Resets via cron and on plan change — see billing-limits.ts. */
+    creditsRemaining: integer("credits_remaining").notNull().default(100),
+    creditsResetAt: timestamp("credits_reset_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("workspaces_owner_name_unique").on(table.ownerId, table.name),
+  ],
+);
 
 export const workspaceMemberships = pgTable(
   "workspace_memberships",

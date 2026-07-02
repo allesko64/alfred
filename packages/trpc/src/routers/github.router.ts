@@ -17,6 +17,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import {
   aiReviews,
   checkBillingLimit,
+  checkWorkspaceCreationLimit,
   codeChunks,
   features,
   projects,
@@ -160,6 +161,30 @@ export const githubRouter = createTRPCRouter({
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "No repository is accessible to this GitHub App installation",
+        });
+      }
+
+      const [nameTaken] = await ctx.db
+        .select({ id: workspaces.id })
+        .from(workspaces)
+        .where(
+          and(eq(workspaces.ownerId, ctx.user.id), eq(workspaces.name, input.name)),
+        )
+        .limit(1);
+
+      if (nameTaken) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "You already have a workspace with that name",
+        });
+      }
+
+      const workspaceLimit = await checkWorkspaceCreationLimit(ctx.user.id);
+      if (!workspaceLimit.allowed) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message:
+            "You've reached the workspace limit for your plan. Upgrade an existing workspace to create more.",
         });
       }
 

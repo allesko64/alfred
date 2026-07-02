@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "workspaces_owner_name_unique" ON "workspaces" USING btree ("owner_id","name");

@@ -106,6 +106,34 @@
       "when": 1782828892629,
       "tag": "0014_wooden_senator_kelly",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1782976064930,
+      "tag": "0015_moaning_shape",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1782977196593,
+      "tag": "0016_rapid_tigra",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1783014459215,
+      "tag": "0017_free_toxin",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783016201937,
+      "tag": "0018_tough_solo",
+      "breakpoints": true
     }
   ]
 }

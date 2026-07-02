@@ -10,3 +10,4 @@ export * from "./user.schema";
 export * from "./review.schema";
 export * from "./notification.schema";
 export * from "./changelog.schema";
+export * from "./share.schema";

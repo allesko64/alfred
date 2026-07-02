@@ -41,6 +41,20 @@ const PLAN_LIMITS: Record<BillingLimitType, Record<WorkspacePlan, number>> = {
 /** Terminal statuses — features in these states don't count toward the active cap. */
 const TERMINAL_FEATURE_STATUSES = ["SHIPPED", "REJECTED"] as const;
 
+/**
+ * Hard cap on how many workspaces a single user may own. Unlike repos/members/features,
+ * this isn't scoped to one workspace's own plan (the workspace doesn't exist yet when this
+ * is checked) — it's gated by the best plan among workspaces the user already owns.
+ */
+const WORKSPACE_OWNERSHIP_LIMITS: Record<WorkspacePlan, number> = {
+  free: 1,
+  pro: 3,
+  team: 5,
+};
+
+/** Plan tiers ordered lowest to highest, used to pick the "best" plan a user has. */
+const PLAN_RANK: Record<WorkspacePlan, number> = { free: 0, pro: 1, team: 2 };
+
 export interface BillingLimitResult {
   allowed: boolean;
   current: number;
@@ -110,6 +124,28 @@ export async function checkBillingLimit(
   const current = await COUNTERS[limitType](workspaceId);
 
   return { allowed: current < limit, current, limit };
+}
+
+/**
+ * Checks whether a user may own another workspace. The cap is based on the best (highest-tier)
+ * plan among workspaces they already own — owning zero, or only free-plan workspaces, caps them
+ * at WORKSPACE_OWNERSHIP_LIMITS.free; upgrading any owned workspace raises the cap.
+ */
+export async function checkWorkspaceCreationLimit(
+  ownerId: string,
+): Promise<BillingLimitResult> {
+  const owned = await db
+    .select({ plan: workspaces.plan })
+    .from(workspaces)
+    .where(eq(workspaces.ownerId, ownerId));
+
+  const bestPlan = owned.reduce<WorkspacePlan>(
+    (best, { plan }) => (PLAN_RANK[plan] > PLAN_RANK[best] ? plan : best),
+    "free",
+  );
+
+  const limit = WORKSPACE_OWNERSHIP_LIMITS[bestPlan];
+  return { allowed: owned.length < limit, current: owned.length, limit };
 }
 
 export interface CreditCheckResult {

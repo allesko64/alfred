@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { approvePRDSchema, createPRDSchema, featureInputSchema } from "@alfred/validators";
+import { approvePRDSchema, createPRDSchema, featureInputSchema, updatePRDSchema } from "@alfred/validators";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { checkAndDeductCredits, features, prds } from "@alfred/db";
@@ -57,6 +57,38 @@ export const prdRouter = createTRPCRouter({
         .update(features)
         .set({ status: "PRD_READY", updatedAt: new Date() })
         .where(eq(features.id, input.featureId));
+
+      return prd;
+    }),
+
+  update: workspaceProcedure
+    .input(updatePRDSchema.extend({ workspaceId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [row] = await ctx.db
+        .select({ prd: prds })
+        .from(prds)
+        .innerJoin(features, eq(features.id, prds.featureId))
+        .where(and(eq(prds.featureId, input.featureId), eq(features.workspaceId, ctx.workspaceId)))
+        .limit(1);
+
+      if (!row) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      const [prd] = await ctx.db
+        .update(prds)
+        .set({
+          problemStatement: input.problemStatement,
+          goals: input.goals,
+          nonGoals: input.nonGoals,
+          userStories: input.userStories,
+          acceptanceCriteria: input.acceptanceCriteria,
+          assumptions: input.assumptions,
+          version: row.prd.version + 1,
+          updatedAt: new Date(),
+        })
+        .where(eq(prds.featureId, input.featureId))
+        .returning();
 
       return prd;
     }),

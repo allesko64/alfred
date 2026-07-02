@@ -12,7 +12,10 @@ import { Button as StatefulButton } from "@/components/ui/stateful-button"
 import { useSetFeatureHeaderAction } from "@/components/workspace/feature-detail/feature-header-actions"
 import { KanbanBoard } from "@/components/workspace/feature-detail/kanban/kanban-board"
 import { BranchNameBanner } from "@/components/workspace/feature-detail/branch-name-banner"
+import { ShareDialog } from "@/components/workspace/feature-detail/share-dialog"
 import type { TaskStatus } from "@/components/workspace/feature-detail/kanban/types"
+import { downloadTextFile, tasksToMarkdown } from "@/lib/export-markdown"
+import { slugify } from "@/lib/utils"
 
 export function TasksClient() {
   const { workspaceId, featureId } = useParams<{ workspaceId: string; featureId: string }>()
@@ -64,21 +67,33 @@ export function TasksClient() {
   const members = membersQuery.data ?? []
   const isApproved = feature?.status === "IN_DEVELOPMENT"
   const showApprovalAction = tasks.length > 0 && !isGeneratingTasks && feature?.status === "PLANNING"
+  const isPlanApproved = tasks.length > 0 && !isGeneratingTasks && !showApprovalAction
 
   useSetFeatureHeaderAction(
     useMemo(() => {
+      if (isPlanApproved) {
+        return (
+          <ShareDialog
+            workspaceId={workspaceId}
+            featureId={featureId}
+            downloadLabel="Download Markdown"
+            onDownload={() => {
+              if (!feature) return
+              downloadTextFile(`${slugify(feature.title)}-tasks.md`, tasksToMarkdown(feature.title, tasks))
+            }}
+          />
+        )
+      }
+
       if (!showApprovalAction) return null
 
       return (
-        <div className="flex flex-col items-end gap-1">
-          <StatefulButton onClick={() => approvePlan.mutateAsync({ workspaceId, featureId })}>
-            Approve Plan
-          </StatefulButton>
-          <span className="text-sm text-muted-foreground">Moves this feature into development</span>
-        </div>
+        <StatefulButton onClick={() => approvePlan.mutateAsync({ workspaceId, featureId })}>
+          Approve Plan
+        </StatefulButton>
       )
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [showApprovalAction, workspaceId, featureId]),
+    }, [showApprovalAction, isPlanApproved, workspaceId, featureId, feature, tasks]),
   )
 
   // Once approved, show a brief success state, then dismiss it — the user

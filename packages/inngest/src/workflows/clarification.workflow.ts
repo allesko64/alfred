@@ -25,6 +25,11 @@ const _clarificationWorkflow = inngest.createFunction(
   {
     id: "feature-clarification",
     triggers: { event: "feature/clarification.requested" },
+    // Two events for the same feature (e.g. a client-side retry racing an
+    // already-in-flight request) must not run concurrently — both would read
+    // the same message snapshot and each save their own question, producing
+    // a duplicated/repeated question in the conversation.
+    concurrency: { limit: 1, key: "event.data.featureId" },
   },
   async ({ event, step }) => {
     const { featureId } = event.data;
@@ -115,10 +120,30 @@ const _clarificationWorkflow = inngest.createFunction(
       return result.title.trim();
     });
 
+    const decisionPills = await step.run("generate-decision-pills", async () => {
+      const transcript = messages
+        .map((m) => `${m.role === "alfred" ? "Q" : "A"}: ${m.content}`)
+        .join("\n");
+      const { data: result } = await chatCompleteJSON<{ pills: string[] }>([
+        {
+          role: "system",
+          content:
+            'Summarize the key decisions from this clarification conversation as 3-4 short noun phrases (2-4 words each, no punctuation), e.g. "Toggle in navbar", "All visitors", "No persistence". These will be shown as decision chips in the UI. Respond with ONLY JSON: { "pills": string[] } (3-4 items).',
+        },
+        { role: "user", content: `${feature.originalRequest}\n\n${transcript}` },
+      ]);
+      return result.pills.map((p) => p.trim()).filter(Boolean).slice(0, 4);
+    });
+
     await step.run("update-feature-title-and-status", async () => {
       await db
         .update(features)
-        .set({ title, status: "PRD_GENERATION", updatedAt: new Date() })
+        .set({
+          title,
+          decisionPills,
+          status: "PRD_GENERATION",
+          updatedAt: new Date(),
+        })
         .where(eq(features.id, featureId));
 
       await reportWorkflowProgress(featureId, "clarification", {

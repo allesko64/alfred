@@ -44,6 +44,8 @@ export function NewFeatureChatClient() {
   // clear "thinking" once a genuinely new alfred message arrives — not the
   // stale one already sitting at the end of dbMessages from the prior round.
   const thinkingBaselineRef = useRef(0)
+  // Guards the transition effect below from re-firing on its own state change.
+  const hasTransitionedRef = useRef(false)
 
   const shouldPoll = isThinking && !!featureId
 
@@ -96,33 +98,49 @@ export function NewFeatureChatClient() {
   // If Alfred never replies (stuck/failed background job, credits ran out
   // mid-flight, etc.) don't leave the input locked and the spinner running
   // forever with no feedback — time out and let the user retry.
+  //
+  // Only reset to a retryable state if the mutation itself never landed
+  // (still pending). If it already succeeded, the message was submitted and
+  // a background job is already processing it — resetting here would let the
+  // user resend the same content, firing a second clarification job that
+  // races the first and produces a duplicated/repeated question.
   useEffect(() => {
     if (!isThinking) return
+    const mutationStillPending = createFeature.isPending || submitReply.isPending
     const timeout = setTimeout(() => {
-      setIsThinking(false)
-      setOptimisticContent((content) => {
-        if (content) setInput(content)
-        return null
-      })
-      toast.error("Alfred is taking longer than expected to reply. Please try again.")
+      if (mutationStillPending) {
+        setIsThinking(false)
+        setOptimisticContent((content) => {
+          if (content) setInput(content)
+          return null
+        })
+        toast.error("Alfred is taking longer than expected to reply. Please try again.")
+      } else {
+        toast.error("Alfred is still thinking — this is taking longer than usual.")
+      }
     }, THINKING_TIMEOUT_MS)
     return () => clearTimeout(timeout)
-  }, [isThinking])
+  }, [isThinking, createFeature.isPending, submitReply.isPending])
 
   // Clarification wrapped up — show the hand-off message, then redirect.
+  // Note: `isTransitioning` is deliberately NOT a dependency here. Setting it
+  // below would otherwise re-run this effect on the next render, and the
+  // cleanup from the previous run would cancel the timeout we just armed
+  // before it ever fires — silently killing the redirect every time.
   useEffect(() => {
     const status = featureQuery.data?.status
-    if (!featureId || !status || status === "DRAFT" || status === "CLARIFYING" || isTransitioning) {
+    if (!featureId || !status || status === "DRAFT" || status === "CLARIFYING" || hasTransitionedRef.current) {
       return
     }
 
+    hasTransitionedRef.current = true
     setIsThinking(false)
     setIsTransitioning(true)
     const timeout = setTimeout(() => {
       router.push(`/workspace/${workspaceId}/features/${featureId}/prd`)
     }, 1600)
     return () => clearTimeout(timeout)
-  }, [featureQuery.data?.status, featureId, isTransitioning, router, workspaceId])
+  }, [featureQuery.data?.status, featureId, router, workspaceId])
 
   const messages: ConversationMessage[] = useMemo(() => {
     const list: ConversationMessage[] = [{ id: "welcome", role: "alfred", content: WELCOME_MESSAGE }]

@@ -3,6 +3,8 @@ import { type OpenApiMeta } from "trpc-to-openapi";
 import superjson from "superjson";
 import { z } from "zod";
 import { ZodError } from "zod";
+import { eq } from "drizzle-orm";
+import { users } from "@alfred/db";
 import type { Context } from "./context";
 import { type MembershipRole, requireMembership } from "./permissions";
 
@@ -66,6 +68,36 @@ const isAuthed = middleware(({ ctx, next }) => {
 
 /** Requires a valid session. */
 export const protectedProcedure = publicProcedure.use(isAuthed);
+
+const isPlatformAdmin = middleware(async ({ ctx, next }) => {
+  if (!ctx.user) {
+    throw new TRPCError({ code: "UNAUTHORIZED" });
+  }
+
+  const [row] = await ctx.db
+    .select({ isPlatformAdmin: users.isPlatformAdmin })
+    .from(users)
+    .where(eq(users.id, ctx.user.id))
+    .limit(1);
+
+  if (!row?.isPlatformAdmin) {
+    throw new TRPCError({ code: "FORBIDDEN" });
+  }
+
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user,
+    },
+  });
+});
+
+/**
+ * Requires a valid session AND a platform-admin flag on the user record.
+ * Re-checked against the DB on every call (not cached in the session) so
+ * flipping the flag takes effect immediately.
+ */
+export const adminProcedure = publicProcedure.use(isPlatformAdmin);
 
 export const workspaceInputSchema = z.object({
   workspaceId: z.string().uuid(),

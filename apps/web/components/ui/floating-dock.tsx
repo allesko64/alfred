@@ -139,14 +139,14 @@ function IconContainer({
     return val - bounds.x - bounds.width / 2;
   });
 
-  const widthTransform = useTransform(distance, [-150, 0, 150], [40, 80, 40]);
-  const heightTransform = useTransform(distance, [-150, 0, 150], [40, 80, 40]);
+  const widthTransform = useTransform(distance, [-150, 0, 150], [40, 56, 40]);
+  const heightTransform = useTransform(distance, [-150, 0, 150], [40, 56, 40]);
 
-  const widthTransformIcon = useTransform(distance, [-150, 0, 150], [20, 40, 20]);
+  const widthTransformIcon = useTransform(distance, [-150, 0, 150], [20, 28, 20]);
   const heightTransformIcon = useTransform(
     distance,
     [-150, 0, 150],
-    [20, 40, 20],
+    [20, 28, 20],
   );
 
   const width = useSpring(widthTransform, {

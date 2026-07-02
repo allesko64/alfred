@@ -5,10 +5,17 @@ import { motion, useAnimate } from "motion/react";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   className?: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
+  /** Visual color variant. `blue` (default) is the primary action color; `green` is used for share/export-style actions. */
+  variant?: "blue" | "green";
 }
 
-export const Button = ({ className, children, ...props }: ButtonProps) => {
+const VARIANT_CLASSES = {
+  blue: "bg-[#0075DE] hover:ring-[#0075DE]",
+  green: "bg-[#0F9D58] hover:ring-[#0F9D58]",
+};
+
+export const Button = ({ className, children, variant = "blue", ...props }: ButtonProps) => {
   const [scope, animate] = useAnimate();
 
   const animateLoading = async () => {
@@ -85,7 +92,8 @@ export const Button = ({ className, children, ...props }: ButtonProps) => {
     <motion.button
       ref={scope}
       className={cn(
-        "flex min-w-[120px] cursor-pointer items-center justify-center gap-2 rounded-full bg-[#0075DE] px-4 py-2 font-medium text-white ring-offset-2 transition duration-200 hover:ring-2 hover:ring-[#0075DE] dark:ring-offset-black",
+        "flex min-w-[120px] cursor-pointer items-center justify-center gap-2 rounded-full px-4 py-2 font-medium text-white ring-offset-2 transition duration-200 hover:ring-2 dark:ring-offset-black",
+        VARIANT_CLASSES[variant],
         className,
       )}
       {...buttonProps}

@@ -1,3 +1,4 @@
+import { adminRouter } from "./routers/admin.router";
 import { billingRouter } from "./routers/billing.router";
 import { changelogRouter } from "./routers/changelog.router";
 import { featureRouter } from "./routers/feature.router";
@@ -6,6 +7,7 @@ import { notificationRouter } from "./routers/notification.router";
 import { prdRouter } from "./routers/prd.router";
 import { projectRouter } from "./routers/project.router";
 import { reviewRouter } from "./routers/review.router";
+import { shareRouter } from "./routers/share.router";
 import { taskRouter } from "./routers/task.router";
 import { userRouter } from "./routers/user.router";
 import { workspaceRouter } from "./routers/workspace.router";
@@ -23,6 +25,8 @@ export const appRouter = createTRPCRouter({
   notification: notificationRouter,
   billing: billingRouter,
   changelog: changelogRouter,
+  admin: adminRouter,
+  share: shareRouter,
 });
 
 export type AppRouter = typeof appRouter;

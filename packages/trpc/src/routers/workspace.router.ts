@@ -11,6 +11,7 @@ import { z } from "zod";
 import {
   ACTIVE_STATUSES,
   checkBillingLimit,
+  checkWorkspaceCreationLimit,
   features,
   IN_REVIEW_STATUSES,
   membershipRoleEnum,
@@ -77,6 +78,33 @@ export const workspaceRouter = createTRPCRouter({
         throw new TRPCError({
           code: "CONFLICT",
           message: "That slug is already taken",
+        });
+      }
+
+      const [nameTaken] = await ctx.db
+        .select({ id: workspaces.id })
+        .from(workspaces)
+        .where(
+          and(
+            eq(workspaces.ownerId, ctx.user.id),
+            eq(workspaces.name, input.name),
+          ),
+        )
+        .limit(1);
+
+      if (nameTaken) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "You already have a workspace with that name",
+        });
+      }
+
+      const workspaceLimit = await checkWorkspaceCreationLimit(ctx.user.id);
+      if (!workspaceLimit.allowed) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message:
+            "You've reached the workspace limit for your plan. Upgrade an existing workspace to create more.",
         });
       }
 
@@ -152,6 +180,19 @@ export const workspaceRouter = createTRPCRouter({
           eq(workspaces.id, workspaceMemberships.workspaceId),
         )
         .where(eq(workspaceMemberships.userId, ctx.user.id));
+    }),
+
+  checkCreationLimit: protectedProcedure
+    .input(z.object({}).optional())
+    .output(
+      z.object({
+        allowed: z.boolean(),
+        current: z.number(),
+        limit: z.number(),
+      }),
+    )
+    .query(async ({ ctx }) => {
+      return checkWorkspaceCreationLimit(ctx.user.id);
     }),
 
   listMembers: workspaceProcedure

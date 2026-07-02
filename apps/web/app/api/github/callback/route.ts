@@ -21,9 +21,14 @@ export async function GET(req: Request) {
   const setupAction = url.searchParams.get("setup_action");
   const state = url.searchParams.get("state");
 
+  // Build absolute redirect URLs from the configured app URL rather than
+  // req.url — self-hosted behind a reverse proxy, req.url can resolve to
+  // the internal bind address (e.g. localhost:3001) instead of the public host.
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? url.origin;
+
   const session = await auth.api.getSession({ headers: req.headers });
   if (!session) {
-    const loginUrl = new URL("/login", req.url);
+    const loginUrl = new URL("/login", baseUrl);
     loginUrl.searchParams.set("callbackURL", `${url.pathname}${url.search}`);
     return NextResponse.redirect(loginUrl);
   }
@@ -31,8 +36,8 @@ export async function GET(req: Request) {
   const addRepoMatch = state?.match(/^add-repo:([^:]+):/);
 
   const target = addRepoMatch
-    ? new URL(`/workspace/${addRepoMatch[1]}/github`, req.url)
-    : new URL("/onboarding/workspace", req.url);
+    ? new URL(`/workspace/${addRepoMatch[1]}/github`, baseUrl)
+    : new URL("/onboarding/workspace", baseUrl);
 
   if (installationId) target.searchParams.set("installation_id", installationId);
   if (setupAction) target.searchParams.set("setup_action", setupAction);

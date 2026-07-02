@@ -4,13 +4,64 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "framer-motion"
-import { CheckCircleIcon, WarningCircleIcon } from "@phosphor-icons/react"
+import { CheckCircleIcon, PlusIcon, TrashIcon, WarningCircleIcon } from "@phosphor-icons/react"
 
 import { useTRPC } from "@/lib/trpc/client"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { LoaderOne } from "@/components/ui/loader"
 import { Button as StatefulButton } from "@/components/ui/stateful-button"
+import { Textarea } from "@/components/ui/textarea"
 import { useSetFeatureHeaderAction } from "@/components/workspace/feature-detail/feature-header-actions"
+import { ShareDialog } from "@/components/workspace/feature-detail/share-dialog"
+import { DecisionPills } from "@/components/workspace/conversation"
+import { downloadTextFile, prdToMarkdown } from "@/lib/export-markdown"
+import { slugify } from "@/lib/utils"
+
+type PRDFormState = {
+  problemStatement: string
+  goals: string[]
+  nonGoals: string[]
+  userStories: string[]
+  acceptanceCriteria: string[]
+  assumptions: string[]
+}
+
+function EditableList({
+  items,
+  onChange,
+  placeholder,
+}: {
+  items: string[]
+  onChange: (items: string[]) => void
+  placeholder: string
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      {items.map((item, i) => (
+        <div key={i} className="flex items-start gap-2">
+          <Textarea
+            value={item}
+            placeholder={placeholder}
+            onChange={(e) => onChange(items.map((v, idx) => (idx === i ? e.target.value : v)))}
+            className="min-h-9 rounded-md"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+          >
+            <TrashIcon />
+          </Button>
+        </div>
+      ))}
+      <Button type="button" variant="outline" size="sm" onClick={() => onChange([...items, ""])}>
+        <PlusIcon data-icon="inline-start" /> Add
+      </Button>
+    </div>
+  )
+}
 
 const CARD_VARIANTS = {
   hidden: { opacity: 0, y: 8 },
@@ -122,23 +173,103 @@ export function PRDClient() {
     }),
   )
 
+  const updatePRD = useMutation(
+    trpc.prd.update.mutationOptions({
+      onSuccess: (updated) => {
+        queryClient.setQueryData(trpc.prd.getByFeature.queryKey({ workspaceId, featureId }), updated)
+        setIsEditing(false)
+        setForm(null)
+      },
+    }),
+  )
+
   const prd = prdQuery.data
   const showApprovalAction = !!prd && feature?.status !== "REJECTED" && !feature?.approvedAt
+  const isPrdApproved = !!prd && !!feature?.approvedAt
+
+  const [isEditing, setIsEditing] = useState(false)
+  const [form, setForm] = useState<PRDFormState | null>(null)
+
+  function startEditing() {
+    if (!prd) return
+    setForm({
+      problemStatement: prd.problemStatement ?? "",
+      goals: (prd.goals as string[] | null) ?? [],
+      nonGoals: (prd.nonGoals as string[] | null) ?? [],
+      userStories: (prd.userStories as string[] | null) ?? [],
+      acceptanceCriteria: (prd.acceptanceCriteria as string[] | null) ?? [],
+      assumptions: (prd.assumptions as string[] | null) ?? [],
+    })
+    setIsEditing(true)
+  }
+
+  function cancelEditing() {
+    setIsEditing(false)
+    setForm(null)
+  }
+
+  function saveEditing() {
+    if (!form) return
+    updatePRD.mutate({
+      workspaceId,
+      featureId,
+      problemStatement: form.problemStatement,
+      goals: form.goals.filter((v) => v.trim().length > 0),
+      nonGoals: form.nonGoals.filter((v) => v.trim().length > 0),
+      userStories: form.userStories.filter((v) => v.trim().length > 0),
+      acceptanceCriteria: form.acceptanceCriteria.filter((v) => v.trim().length > 0),
+      assumptions: form.assumptions.filter((v) => v.trim().length > 0),
+    })
+  }
 
   useSetFeatureHeaderAction(
     useMemo(() => {
-      if (!showApprovalAction) return null
+      if (isEditing) {
+        return (
+          <div className="flex items-center gap-2">
+            <StatefulButton
+              className="bg-secondary text-secondary-foreground hover:ring-secondary"
+              onClick={cancelEditing}
+              disabled={updatePRD.isPending}
+            >
+              Cancel
+            </StatefulButton>
+            <StatefulButton onClick={saveEditing}>Save PRD</StatefulButton>
+          </div>
+        )
+      }
+
+      if (isPrdApproved) {
+        return (
+          <ShareDialog
+            workspaceId={workspaceId}
+            featureId={featureId}
+            downloadLabel="Download Markdown"
+            onDownload={() => {
+              if (!prd || !feature) return
+              downloadTextFile(`${slugify(feature.title)}-prd.md`, prdToMarkdown(feature.title, prd))
+            }}
+          />
+        )
+      }
+
+      if (!prd || !showApprovalAction) return null
 
       return (
-        <div className="flex flex-col items-end gap-1">
+        <div className="flex items-center gap-2">
+          <StatefulButton
+            className="bg-neutral-500 hover:ring-neutral-500 dark:bg-neutral-600 dark:hover:ring-neutral-600"
+            onClick={startEditing}
+          >
+            Edit PRD
+          </StatefulButton>
           <StatefulButton onClick={() => approvePRD.mutateAsync({ workspaceId, featureId })}>
             Approve PRD
           </StatefulButton>
-          <span className="text-sm text-muted-foreground">Generates engineering tasks</span>
         </div>
       )
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [showApprovalAction, workspaceId, featureId]),
+    }, [isEditing, showApprovalAction, isPrdApproved, workspaceId, featureId, prd, feature, updatePRD.isPending, form]),
   )
 
   // Once task generation finishes, show a brief success state then hand off
@@ -194,14 +325,74 @@ export function PRDClient() {
     )
   }
 
+  if (isEditing && form) {
+    return (
+      <div className="flex w-full flex-col gap-6 py-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <PRDCard title="Problem Statement" index={0} className="md:col-span-2">
+            <Textarea
+              value={form.problemStatement}
+              onChange={(e) => setForm({ ...form, problemStatement: e.target.value })}
+              className="min-h-24 rounded-md"
+            />
+          </PRDCard>
+
+          <PRDCard title="Goals" index={1}>
+            <EditableList
+              items={form.goals}
+              onChange={(goals) => setForm({ ...form, goals })}
+              placeholder="Add a goal"
+            />
+          </PRDCard>
+
+          <PRDCard title="Non Goals" index={2}>
+            <EditableList
+              items={form.nonGoals}
+              onChange={(nonGoals) => setForm({ ...form, nonGoals })}
+              placeholder="Add a non-goal"
+            />
+          </PRDCard>
+
+          <PRDCard title="User Stories" index={3} className="md:col-span-2">
+            <EditableList
+              items={form.userStories}
+              onChange={(userStories) => setForm({ ...form, userStories })}
+              placeholder="Add a user story"
+            />
+          </PRDCard>
+
+          <PRDCard title="Acceptance Criteria" index={4}>
+            <EditableList
+              items={form.acceptanceCriteria}
+              onChange={(acceptanceCriteria) => setForm({ ...form, acceptanceCriteria })}
+              placeholder="Add acceptance criteria"
+            />
+          </PRDCard>
+
+          <PRDCard title="Assumptions" index={5}>
+            <EditableList
+              items={form.assumptions}
+              onChange={(assumptions) => setForm({ ...form, assumptions })}
+              placeholder="Add an assumption"
+            />
+          </PRDCard>
+        </div>
+      </div>
+    )
+  }
+
   const goals = (prd.goals as string[] | null) ?? []
   const nonGoals = (prd.nonGoals as string[] | null) ?? []
   const userStories = (prd.userStories as string[] | null) ?? []
   const acceptanceCriteria = (prd.acceptanceCriteria as string[] | null) ?? []
   const assumptions = (prd.assumptions as string[] | null) ?? []
 
+  const decisionPills = feature?.decisionPills ?? []
+
   return (
     <div className="flex w-full flex-col gap-6 py-6">
+      {decisionPills.length > 0 && <DecisionPills pills={decisionPills} variant="inline" />}
+
       {prd.scopeWarning && (
         <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 px-4 py-4">
           <WarningCircleIcon className="mt-0.5 size-4 shrink-0 text-warning" />

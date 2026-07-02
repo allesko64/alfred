@@ -38,3 +38,5 @@ yarn-error.log*
 .DS_Store
 *.pem
 AUDIT_FINDINGS.md
+
+feature_upgrade_plan.md

@@ -1,4 +1,6 @@
 export { AlfredAvatar } from "./alfred-avatar"
+export { ConfirmedTranscript } from "./confirmed-transcript"
+export { DecisionPills } from "./decision-pills"
 export { MessageBubble } from "./message-bubble"
 export { ThinkingBubble } from "./thinking-bubble"
 export type { ConversationMessage } from "./types"

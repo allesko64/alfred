@@ -18,6 +18,8 @@ export const users = pgTable("users", {
   digestEnabled: boolean("digest_enabled").notNull().default(true),
   digestHourLocal: integer("digest_hour_local").notNull().default(9),
   digestTimezone: text("digest_timezone").notNull().default("UTC"),
+  /** Platform-wide admin flag, separate from per-workspace membershipRoleEnum. */
+  isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

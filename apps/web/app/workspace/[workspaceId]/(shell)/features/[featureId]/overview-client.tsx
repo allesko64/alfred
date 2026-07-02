@@ -14,8 +14,26 @@ import { Progress } from "@/components/ui/progress"
 import { LoaderFive } from "@/components/ui/loader"
 import { AIChatShell } from "@/components/ui/ai-chat"
 import { PlaceholdersAndVanishInput } from "@/components/ui/placeholders-and-vanish-input"
-import { AlfredAvatar, MessageBubble } from "@/components/workspace/conversation"
+import { AlfredAvatar, ConfirmedTranscript, MessageBubble } from "@/components/workspace/conversation"
 import type { ConversationMessage } from "@/components/workspace/conversation"
+
+// Feature statuses reached only after the PRD has actually been generated —
+// clarification is a settled, signed-off record at this point, not a paused
+// chat. Anything before this (including PRD_GENERATION, still in flight)
+// keeps the live chat UI.
+const CONFIRMED_STATUSES = new Set([
+  "PRD_READY",
+  "TASK_GENERATION",
+  "PLANNING",
+  "IN_DEVELOPMENT",
+  "PR_LINKED",
+  "REVIEWING",
+  "CHANGES_REQUESTED",
+  "RE_REVIEWING",
+  "REVIEW_PASSED",
+  "PENDING_APPROVAL",
+  "SHIPPED",
+])
 
 // Safety net: if Alfred's background reply never lands (stuck/failed job), don't
 // leave the chat spinning forever — surface an error and let the user retry.
@@ -52,6 +70,7 @@ export function OverviewClient() {
   )
 
   const isClarifying = feature?.status === "CLARIFYING"
+  const isConfirmed = !!feature && CONFIRMED_STATUSES.has(feature.status)
   const shouldPoll = isThinking || isClarifying
 
   const { data: dbMessages, isLoading } = useQuery(
@@ -176,54 +195,74 @@ export function OverviewClient() {
     // which already excludes the sidebar (shell layout offsets with pl-60) —
     // so this centers relative to the content area, not the full viewport.
     <div className="flex flex-col items-center gap-6 py-6">
-      <AIChatShell
-        title="Alfred — Conversation"
-        className="h-[640px] w-full max-w-[700px]"
-        footer={
-          isClarifying && (
-            <PlaceholdersAndVanishInput
-              placeholders={INPUT_PLACEHOLDERS}
-              disabled={isThinking}
-              isThinking={isThinking}
-              onChange={(e) => setInput(e.target.value)}
-              onSubmit={handleSubmit}
-            />
-          )
-        }
-      >
-        <div className="flex w-full flex-col gap-2">
-          {isLoading ? (
-            <Skeleton className="h-32 w-full" />
-          ) : (
-            messages.map((message, index) => {
-              const previous = messages[index - 1]
-              const isNewExchange = index > 0 && message.role === "alfred" && previous?.role === "user"
+      {isConfirmed ? (
+        isLoading ? (
+          <Skeleton className="h-32 w-full max-w-[700px]" />
+        ) : (
+          <ConfirmedTranscript
+            messages={messages.map(
+              (message) =>
+                ({
+                  id: message.id,
+                  role: message.role,
+                  content: message.content,
+                  options: message.options as string[] | null,
+                  createdAt: message.createdAt,
+                }) satisfies ConversationMessage,
+            )}
+            decisionPills={feature?.decisionPills ?? null}
+          />
+        )
+      ) : (
+        <AIChatShell
+          title="Alfred — Conversation"
+          className="h-[640px] w-full max-w-[700px]"
+          footer={
+            isClarifying && (
+              <PlaceholdersAndVanishInput
+                placeholders={INPUT_PLACEHOLDERS}
+                disabled={isThinking}
+                isThinking={isThinking}
+                onChange={(e) => setInput(e.target.value)}
+                onSubmit={handleSubmit}
+              />
+            )
+          }
+        >
+          <div className="flex w-full flex-col gap-2">
+            {isLoading ? (
+              <Skeleton className="h-32 w-full" />
+            ) : (
+              messages.map((message, index) => {
+                const previous = messages[index - 1]
+                const isNewExchange = index > 0 && message.role === "alfred" && previous?.role === "user"
 
-              return (
-                <div key={message.id} className={isNewExchange ? "pt-6" : undefined}>
-                  {isNewExchange && (
-                    <div className="pb-2 text-center text-[11px] text-white/40">
-                      {formatRelativeTime(message.createdAt)}
-                    </div>
-                  )}
-                  <MessageBubble
-                    message={{
-                      id: message.id,
-                      role: message.role,
-                      content: message.content,
-                      options: message.options as string[] | null,
-                      createdAt: message.createdAt,
-                    } satisfies ConversationMessage}
-                    interactive={isClarifying}
-                    showOptions={isClarifying && message.id === lastMessageId && !isThinking}
-                    onOptionClick={submitMessage}
-                  />
-                </div>
-              )
-            })
-          )}
-        </div>
-      </AIChatShell>
+                return (
+                  <div key={message.id} className={isNewExchange ? "pt-6" : undefined}>
+                    {isNewExchange && (
+                      <div className="pb-2 text-center text-[11px] text-white/40">
+                        {formatRelativeTime(message.createdAt)}
+                      </div>
+                    )}
+                    <MessageBubble
+                      message={{
+                        id: message.id,
+                        role: message.role,
+                        content: message.content,
+                        options: message.options as string[] | null,
+                        createdAt: message.createdAt,
+                      } satisfies ConversationMessage}
+                      interactive={isClarifying}
+                      showOptions={isClarifying && message.id === lastMessageId && !isThinking}
+                      onOptionClick={submitMessage}
+                    />
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </AIChatShell>
+      )}
 
       <AnimatePresence>
         {(isWritingPRD || redirecting) && (
