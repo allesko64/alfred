@@ -16,12 +16,18 @@ function verifySignature(payload: string, signature: string | null, secret: stri
   return timingSafeEqual(expectedBuffer, signatureBuffer);
 }
 
+// Events GitHub sends to the App's own webhook URL, signed with the App-wide
+// GITHUB_WEBHOOK_SECRET. These carry no top-level `repository`, so they can't
+// be verified via a per-repo secret lookup.
+const APP_LEVEL_EVENTS = new Set(["installation", "installation_repositories"]);
+
 export async function POST(req: Request) {
   // Read the raw body once — GitHub signs the exact bytes, so the same
   // string is reused both to look up the repo (for its per-repo secret)
   // and to verify the HMAC signature.
   const rawBody = await req.text();
   const signature = req.headers.get("x-hub-signature-256");
+  const eventType = req.headers.get("x-github-event");
 
   // Never log the full payload — it may contain sensitive data.
   const payload = JSON.parse(rawBody) as {
@@ -29,6 +35,18 @@ export async function POST(req: Request) {
     repository?: { id?: number; full_name?: string };
     pull_request?: { number?: number };
   };
+
+  if (eventType && APP_LEVEL_EVENTS.has(eventType)) {
+    const appSecret = process.env.GITHUB_WEBHOOK_SECRET;
+
+    if (!appSecret || !verifySignature(rawBody, signature, appSecret)) {
+      return new Response("Invalid signature", { status: 401 });
+    }
+
+    console.log(`github webhook: event=${eventType} action=${payload.action ?? "unknown"}`);
+
+    return new Response("ok", { status: 200 });
+  }
 
   const githubRepoId = payload.repository?.id;
 
@@ -49,8 +67,6 @@ export async function POST(req: Request) {
   if (!verifySignature(rawBody, signature, repository.webhookSecret)) {
     return new Response("Invalid signature", { status: 401 });
   }
-
-  const eventType = req.headers.get("x-github-event");
 
   console.log(`github webhook: event=${eventType} repo=${payload.repository?.full_name ?? "unknown"}`);
 

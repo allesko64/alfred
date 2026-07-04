@@ -128,4 +128,39 @@ describe("github webhook — signature verification (never trust an unverified p
     expect(res.status).toBe(200);
     expect(inngestSend).not.toHaveBeenCalled();
   });
+
+  describe("app-level events (installation, installation_repositories)", () => {
+    // These carry no top-level `repository`, so they're verified against the
+    // GitHub App's own secret (GITHUB_WEBHOOK_SECRET), not a per-repo one.
+    const installationRepositoriesPayload = JSON.stringify({
+      action: "added",
+      installation: { id: 1 },
+      repositories_added: [{ id: 999, full_name: "someone/new-repo" }],
+      repositories_removed: [],
+    });
+
+    it("accepts a validly-signed installation_repositories event with 200", async () => {
+      const body = installationRepositoriesPayload;
+      const signature = sign(body, process.env.GITHUB_WEBHOOK_SECRET);
+      const res = await POST(request(body, { signature, event: "installation_repositories" }));
+
+      expect(res.status).toBe(200);
+      expect(inngestSend).not.toHaveBeenCalled();
+    });
+
+    it("rejects an installation_repositories event signed with the wrong secret", async () => {
+      const body = installationRepositoriesPayload;
+      const res = await POST(request(body, { signature: sign(body, "wrong-secret"), event: "installation_repositories" }));
+
+      expect(res.status).toBe(401);
+    });
+
+    it("accepts a validly-signed installation event with 200", async () => {
+      const body = JSON.stringify({ action: "created", installation: { id: 1 } });
+      const signature = sign(body, process.env.GITHUB_WEBHOOK_SECRET);
+      const res = await POST(request(body, { signature, event: "installation" }));
+
+      expect(res.status).toBe(200);
+    });
+  });
 });

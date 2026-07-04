@@ -3,11 +3,10 @@
 import { useState } from "react"
 import { useMutation } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { CheckIcon, CopyIcon, DownloadSimpleIcon, LinkIcon } from "@phosphor-icons/react"
+import { CheckIcon, CopyIcon, DownloadSimpleIcon, LinkIcon, ShareIcon } from "@phosphor-icons/react"
 
 import { useTRPC } from "@/lib/trpc/client"
 import { Button } from "@/components/ui/button"
-import { Button as StatefulButton } from "@/components/ui/stateful-button"
 import {
   Dialog,
   DialogContent,
@@ -68,7 +67,17 @@ export function ShareDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger render={<StatefulButton variant="green" />}>Share</DialogTrigger>
+      <DialogTrigger
+        render={
+          <Button
+            size="default"
+            className="rounded-full bg-[#0F9D58] text-white ring-offset-2 transition duration-200 hover:bg-[#0F9D58]/90 hover:ring-2 hover:ring-[#0F9D58] dark:ring-offset-black"
+          />
+        }
+      >
+        <ShareIcon data-icon="inline-start" />
+        Share
+      </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Share</DialogTitle>
