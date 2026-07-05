@@ -1,6 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { db, projects, queryClient, repositories, users, workspaces } from "@alfred/db";
+import { eq } from "drizzle-orm";
 
 const { inngestSend } = vi.hoisted(() => ({ inngestSend: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@alfred/inngest", () => ({ inngest: { send: inngestSend } }));
@@ -26,7 +27,7 @@ const pullRequestPayload = (action: string) =>
   JSON.stringify({
     action,
     repository: { id: GITHUB_REPO_ID, full_name: "acme/repo" },
-    pull_request: { number: 7 },
+    pull_request: { number: 7, head: { sha: "abc123" } },
   });
 
 describe("github webhook — signature verification (never trust an unverified payload)", () => {
@@ -79,9 +80,24 @@ describe("github webhook — signature verification (never trust an unverified p
 
     expect(res.status).toBe(200);
     expect(inngestSend).toHaveBeenCalledWith({
+      id: `pr-ingestion/${GITHUB_REPO_ID}/7/opened/abc123`,
       name: "github/pr-ingestion.requested",
       data: { githubRepoId: GITHUB_REPO_ID, githubPrNumber: 7, action: "opened" },
     });
+  });
+
+  it("sends the same event id for both delivery copies so Inngest dedupes them", async () => {
+    const body = pullRequestPayload("opened");
+    // Copy 1: per-repo hook, signed with the repo secret.
+    await POST(request(body, { event: "pull_request" }));
+    // Copy 2: App webhook, signed with the app-level secret.
+    const appSignature = sign(body, process.env.GITHUB_WEBHOOK_SECRET);
+    await POST(request(body, { signature: appSignature, event: "pull_request" }));
+
+    expect(inngestSend).toHaveBeenCalledTimes(2);
+    const [first, second] = inngestSend.mock.calls.map((call) => call[0].id);
+    expect(first).toBe(second);
+    expect(first).toBe(`pr-ingestion/${GITHUB_REPO_ID}/7/opened/abc123`);
   });
 
   it("rejects an invalid signature with 401 and never fires the workflow", async () => {
@@ -129,6 +145,39 @@ describe("github webhook — signature verification (never trust an unverified p
     expect(inngestSend).not.toHaveBeenCalled();
   });
 
+  it("accepts a pull_request event signed with the app-level secret (App webhook path)", async () => {
+    // The GitHub App's own webhook also delivers pull_request events, signed
+    // with GITHUB_WEBHOOK_SECRET rather than the per-repo secret.
+    const body = pullRequestPayload("opened");
+    const signature = sign(body, process.env.GITHUB_WEBHOOK_SECRET);
+    const res = await POST(request(body, { signature, event: "pull_request" }));
+
+    expect(res.status).toBe(200);
+    expect(inngestSend).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "github/pr-ingestion.requested" }),
+    );
+  });
+
+  it("rejects malformed JSON with 400 instead of crashing", async () => {
+    const body = "{not-json";
+    const res = await POST(request(body, { event: "pull_request" }));
+
+    expect(res.status).toBe(400);
+    expect(inngestSend).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for a repo that isn't connected (no stored secret)", async () => {
+    const body = JSON.stringify({
+      action: "opened",
+      repository: { id: 424242424242, full_name: "acme/unknown" },
+      pull_request: { number: 1 },
+    });
+    const res = await POST(request(body, { event: "pull_request" }));
+
+    expect(res.status).toBe(404);
+    expect(inngestSend).not.toHaveBeenCalled();
+  });
+
   describe("app-level events (installation, installation_repositories)", () => {
     // These carry no top-level `repository`, so they're verified against the
     // GitHub App's own secret (GITHUB_WEBHOOK_SECRET), not a per-repo one.
@@ -161,6 +210,61 @@ describe("github webhook — signature verification (never trust an unverified p
       const res = await POST(request(body, { signature, event: "installation" }));
 
       expect(res.status).toBe(200);
+    });
+
+    it("updates the stored installation id when the App is reinstalled", async () => {
+      // A reinstall mints a new installation id; the stored one must follow,
+      // or every later GitHub API call for this repo 404s.
+      const newInstallationId = Date.now();
+      const body = JSON.stringify({
+        action: "created",
+        installation: { id: newInstallationId },
+        repositories: [{ id: GITHUB_REPO_ID, full_name: "acme/repo" }],
+      });
+      const signature = sign(body, process.env.GITHUB_WEBHOOK_SECRET);
+      const res = await POST(request(body, { signature, event: "installation" }));
+
+      expect(res.status).toBe(200);
+      const [repo] = await db
+        .select({ installationId: repositories.installationId })
+        .from(repositories)
+        .where(eq(repositories.githubRepoId, GITHUB_REPO_ID));
+      expect(repo?.installationId).toBe(newInstallationId);
+    });
+
+    it("updates the stored installation id when repos are added to an installation", async () => {
+      const newInstallationId = Date.now() + 1;
+      const body = JSON.stringify({
+        action: "added",
+        installation: { id: newInstallationId },
+        repositories_added: [{ id: GITHUB_REPO_ID, full_name: "acme/repo" }],
+        repositories_removed: [],
+      });
+      const signature = sign(body, process.env.GITHUB_WEBHOOK_SECRET);
+      const res = await POST(request(body, { signature, event: "installation_repositories" }));
+
+      expect(res.status).toBe(200);
+      const [repo] = await db
+        .select({ installationId: repositories.installationId })
+        .from(repositories)
+        .where(eq(repositories.githubRepoId, GITHUB_REPO_ID));
+      expect(repo?.installationId).toBe(newInstallationId);
+    });
+
+    it("does not touch installation ids on an unsigned installation event", async () => {
+      const body = JSON.stringify({
+        action: "created",
+        installation: { id: 31337 },
+        repositories: [{ id: GITHUB_REPO_ID }],
+      });
+      const res = await POST(request(body, { signature: sign(body, "wrong-secret"), event: "installation" }));
+
+      expect(res.status).toBe(401);
+      const [repo] = await db
+        .select({ installationId: repositories.installationId })
+        .from(repositories)
+        .where(eq(repositories.githubRepoId, GITHUB_REPO_ID));
+      expect(repo?.installationId).not.toBe(31337);
     });
   });
 });

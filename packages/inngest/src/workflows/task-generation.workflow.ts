@@ -1,13 +1,15 @@
-import { chatCompleteJSON, getLLMModel } from "@alfred/ai";
+import { chatComplete, chatCompleteJSON, embedTexts, getLLMModel } from "@alfred/ai";
 import {
   db,
+  codeChunks,
   features,
   notifications,
   prds,
+  repositories,
   tasks,
   taskPriorityEnum,
 } from "@alfred/db";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { InngestFunction } from "inngest";
 import { z } from "zod";
 import { inngest } from "../client";
@@ -260,6 +262,38 @@ Rules for the output:
 - "coverage_check" must be honest — if a criterion is not covered,
   say so rather than claiming full coverage`;
 
+const IMPLEMENTATION_PROMPT_SYSTEM_PROMPT = `You are Alfred, an AI-powered software delivery co-pilot. Your job right now is to write a self-contained implementation brief for ONE engineering task. The brief will be copy-pasted into an AI coding agent (Claude Code, Cursor, etc.) working inside the target repository, and it must give that agent everything it needs to complete the task correctly — without access to the PRD, the Kanban board, or this conversation.
+
+THE FEATURE
+
+Feature title:
+{{FEATURE_TITLE}}
+
+Full PRD:
+{{PRD_CONTENT}}
+
+THE TASK TO BRIEF
+
+Title: {{TASK_TITLE}}
+Description: {{TASK_DESCRIPTION}}
+Priority: {{TASK_PRIORITY}}
+
+SIBLING TASKS (context only — these are handled separately and are OUT OF SCOPE):
+{{SIBLING_TASKS}}
+
+CODEBASE CONTEXT (real excerpts from the target repository — may be empty):
+{{CODEBASE_CONTEXT}}
+
+RULES FOR THE BRIEF
+
+1. Write it as direct instructions to the coding agent ("Implement...", "Add...", "Modify..."), not as a description of the task.
+2. Scope discipline: the brief covers ONLY this task. Explicitly tell the agent NOT to implement work belonging to the sibling tasks — name what is out of scope.
+3. Ground it in the codebase context when provided: reference real file paths, existing patterns, and the visible tech stack. Never invent file paths — if the context doesn't show where something lives, tell the agent to locate it first.
+4. Include a "Definition of done" section listing the specific, verifiable outcomes — derive these from the PRD acceptance criteria that this task covers.
+5. Include relevant constraints from the PRD's non-goals and assumptions so the agent doesn't over-build.
+6. Keep it under 500 words. Dense and specific beats long and generic.
+7. Output ONLY the brief itself as plain text/markdown. No preamble, no "Here is the brief", no code fences around the whole output.`;
+
 type PRDContentFields = Pick<
   typeof prds.$inferSelect,
   | "problemStatement"
@@ -282,6 +316,37 @@ function formatPRDContent(prd: PRDContentFields): string {
     `Acceptance Criteria:\n${list(prd.acceptanceCriteria)}`,
     `Assumptions:\n${list(prd.assumptions)}`,
   ].join("\n\n");
+}
+
+/**
+ * Top code chunks for a task, by embedding similarity against the workspace's
+ * indexed repo. Returns "" when no repo is indexed — the brief prompt treats
+ * empty context as "PRD only".
+ */
+async function getTaskCodebaseContext(
+  workspaceId: string,
+  queryText: string,
+): Promise<string> {
+  const [repository] = await db
+    .select({ id: repositories.id, isIndexed: repositories.isIndexed })
+    .from(repositories)
+    .where(and(eq(repositories.workspaceId, workspaceId), isNull(repositories.disconnectedAt)))
+    .limit(1);
+
+  if (!repository?.isIndexed) return "";
+
+  const [queryEmbedding] = await embedTexts([queryText]);
+  if (!queryEmbedding) return "";
+
+  const vectorLiteral = `[${queryEmbedding.join(",")}]`;
+  const chunks = await db
+    .select({ filePath: codeChunks.filePath, content: codeChunks.content })
+    .from(codeChunks)
+    .where(eq(codeChunks.repositoryId, repository.id))
+    .orderBy(sql`${codeChunks.embedding} <=> ${vectorLiteral}::vector`)
+    .limit(5);
+
+  return chunks.map((chunk) => `File: ${chunk.filePath}\n${chunk.content}`).join("\n\n---\n\n");
 }
 
 const _taskGenerationWorkflow = inngest.createFunction(
@@ -403,22 +468,30 @@ const _taskGenerationWorkflow = inngest.createFunction(
         });
       });
 
-      await step.run("save-tasks-and-notify", async () => {
+      const savedTasks = await step.run("save-tasks-and-notify", async () => {
         const sorted = [...result.tasks].sort(
           (a, b) => a.position - b.position,
         );
 
-        await db.insert(tasks).values(
-          sorted.map((task, index) => ({
-            featureId,
-            workspaceId: feature.workspaceId,
-            title: task.title,
-            description: task.description,
-            priority: task.priority,
-            status: "TODO" as const,
-            position: index + 1,
-          })),
-        );
+        const inserted = await db
+          .insert(tasks)
+          .values(
+            sorted.map((task, index) => ({
+              featureId,
+              workspaceId: feature.workspaceId,
+              title: task.title,
+              description: task.description,
+              priority: task.priority,
+              status: "TODO" as const,
+              position: index + 1,
+            })),
+          )
+          .returning({
+            id: tasks.id,
+            title: tasks.title,
+            description: tasks.description,
+            priority: tasks.priority,
+          });
 
         await db
           .update(features)
@@ -439,7 +512,58 @@ const _taskGenerationWorkflow = inngest.createFunction(
           progressMessage: "Tasks ready",
           progressPercent: 100,
         });
+
+        return inserted;
       });
+
+      // Fan out one brief per task. Tasks are already saved and announced, so
+      // a failed brief must not fail the workflow — the pill just stays in
+      // its "generating" state and the rest of the board is unaffected.
+      await Promise.all(
+        savedTasks.map((task) =>
+          step.run(`generate-implementation-prompt-${task.id}`, async () => {
+            try {
+              const siblings = savedTasks
+                .filter((sibling) => sibling.id !== task.id)
+                .map((sibling) => `- ${sibling.title}`)
+                .join("\n");
+
+              const codebaseContext = await getTaskCodebaseContext(
+                feature.workspaceId,
+                `${task.title}\n${task.description ?? ""}`,
+              );
+
+              const prompt = IMPLEMENTATION_PROMPT_SYSTEM_PROMPT.replace(
+                "{{FEATURE_TITLE}}",
+                feature.title,
+              )
+                .replace("{{PRD_CONTENT}}", formatPRDContent(prd))
+                .replace("{{TASK_TITLE}}", task.title)
+                .replace("{{TASK_DESCRIPTION}}", task.description ?? "")
+                .replace("{{TASK_PRIORITY}}", task.priority)
+                .replace("{{SIBLING_TASKS}}", siblings || "(none)")
+                .replace("{{CODEBASE_CONTEXT}}", codebaseContext);
+
+              const { content } = await chatComplete([
+                { role: "system", content: prompt },
+              ]);
+
+              await db
+                .update(tasks)
+                .set({ implementationPrompt: content, updatedAt: new Date() })
+                .where(eq(tasks.id, task.id));
+
+              return { taskId: task.id, status: "generated" };
+            } catch (error) {
+              console.error(
+                `Failed to generate implementation prompt for task ${task.id}`,
+                error,
+              );
+              return { taskId: task.id, status: "failed" };
+            }
+          }),
+        ),
+      );
 
       return { status: "tasks-ready", generatedBy: getLLMModel() };
     } catch (error) {

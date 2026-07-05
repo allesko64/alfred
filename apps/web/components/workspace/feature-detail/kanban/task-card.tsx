@@ -1,7 +1,8 @@
 "use client"
 
+import { useState } from "react"
 import { useDraggable } from "@dnd-kit/core"
-import { DotsSixVerticalIcon } from "@phosphor-icons/react"
+import { CheckIcon, CopyIcon, DotsSixVerticalIcon } from "@phosphor-icons/react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
@@ -11,6 +12,51 @@ import type { KanbanTask, WorkspaceMember } from "./types"
 function initials(member: WorkspaceMember) {
   const source = member.name ?? member.email
   return source.slice(0, 2).toUpperCase()
+}
+
+function CopyPromptPill({ prompt }: { prompt: string | null }) {
+  const [copied, setCopied] = useState(false)
+
+  if (!prompt) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground/60">
+        Prompt generating…
+      </span>
+    )
+  }
+
+  return (
+    // Not a <button>: the card root is already a button (nested interactive
+    // elements are invalid HTML and break dnd-kit's drag listeners).
+    <span
+      role="button"
+      tabIndex={0}
+      aria-label="Copy AI implementation prompt"
+      onPointerDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          e.stopPropagation()
+          void navigator.clipboard.writeText(prompt)
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+        }
+      }}
+      onClick={(e) => {
+        e.stopPropagation()
+        void navigator.clipboard.writeText(prompt)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      }}
+      className={cn(
+        "inline-flex cursor-pointer items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-[#0075DE]/40 hover:text-foreground",
+        copied && "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
+      )}
+    >
+      {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
+      {copied ? "Copied" : "Copy prompt"}
+    </span>
+  )
 }
 
 export function TaskCard({
@@ -44,7 +90,10 @@ export function TaskCard({
           <span className="line-clamp-2 text-sm font-normal text-muted-foreground">{task.description}</span>
         )}
         <div className="flex items-center justify-between gap-2 pt-1">
-          <PriorityBadge priority={task.priority} />
+          <div className="flex items-center gap-1.5">
+            <PriorityBadge priority={task.priority} />
+            <CopyPromptPill prompt={task.implementationPrompt} />
+          </div>
           {assignee && (
             <Avatar size="sm">
               <AvatarFallback className="text-[10px]">{initials(assignee)}</AvatarFallback>

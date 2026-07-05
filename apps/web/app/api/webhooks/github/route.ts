@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { db, repositories } from "@alfred/db";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { inngest } from "@alfred/inngest";
 
 const HANDLED_ACTIONS = new Set(["opened", "synchronize", "closed"]);
@@ -21,6 +21,40 @@ function verifySignature(payload: string, signature: string | null, secret: stri
 // be verified via a per-repo secret lookup.
 const APP_LEVEL_EVENTS = new Set(["installation", "installation_repositories"]);
 
+interface WebhookPayload {
+  action?: string;
+  repository?: { id?: number; full_name?: string };
+  pull_request?: { number?: number; head?: { sha?: string } };
+  installation?: { id?: number };
+  // `installation` (action=created) lists repos as `repositories`;
+  // `installation_repositories` (action=added) as `repositories_added`.
+  repositories?: Array<{ id?: number }>;
+  repositories_added?: Array<{ id?: number }>;
+}
+
+/**
+ * Keeps stored installation ids in sync when the App is (re)installed. A
+ * reinstall mints a new installation id — without this, every stored id goes
+ * stale and all subsequent GitHub API calls for those repos 404.
+ */
+async function syncInstallation(payload: WebhookPayload): Promise<void> {
+  const installationId = payload.installation?.id;
+  if (!installationId) return;
+
+  if (payload.action !== "created" && payload.action !== "added") return;
+
+  const repoIds = [...(payload.repositories ?? []), ...(payload.repositories_added ?? [])]
+    .map((repo) => repo.id)
+    .filter((id): id is number => typeof id === "number");
+
+  if (repoIds.length === 0) return;
+
+  await db
+    .update(repositories)
+    .set({ installationId })
+    .where(inArray(repositories.githubRepoId, repoIds));
+}
+
 export async function POST(req: Request) {
   // Read the raw body once — GitHub signs the exact bytes, so the same
   // string is reused both to look up the repo (for its per-repo secret)
@@ -30,20 +64,27 @@ export async function POST(req: Request) {
   const eventType = req.headers.get("x-github-event");
 
   // Never log the full payload — it may contain sensitive data.
-  const payload = JSON.parse(rawBody) as {
-    action?: string;
-    repository?: { id?: number; full_name?: string };
-    pull_request?: { number?: number };
-  };
+  let payload: WebhookPayload;
+  try {
+    payload = JSON.parse(rawBody) as WebhookPayload;
+  } catch {
+    console.warn(`github webhook: rejected event=${eventType} reason=malformed-json`);
+    return new Response("Invalid payload", { status: 400 });
+  }
 
   if (eventType && APP_LEVEL_EVENTS.has(eventType)) {
     const appSecret = process.env.GITHUB_WEBHOOK_SECRET;
 
     if (!appSecret || !verifySignature(rawBody, signature, appSecret)) {
+      console.warn(
+        `github webhook: rejected event=${eventType} reason=${appSecret ? "bad-signature" : "GITHUB_WEBHOOK_SECRET-not-set"}`,
+      );
       return new Response("Invalid signature", { status: 401 });
     }
 
     console.log(`github webhook: event=${eventType} action=${payload.action ?? "unknown"}`);
+
+    await syncInstallation(payload);
 
     return new Response("ok", { status: 200 });
   }
@@ -51,6 +92,7 @@ export async function POST(req: Request) {
   const githubRepoId = payload.repository?.id;
 
   if (!githubRepoId) {
+    console.warn(`github webhook: rejected event=${eventType} reason=no-repository-id`);
     return new Response("Not found", { status: 404 });
   }
 
@@ -60,11 +102,21 @@ export async function POST(req: Request) {
     .where(eq(repositories.githubRepoId, githubRepoId))
     .limit(1);
 
-  if (!repository?.webhookSecret) {
+  if (!repository) {
+    console.warn(`github webhook: rejected event=${eventType} repo=${githubRepoId} reason=unknown-repo`);
     return new Response("Not found", { status: 404 });
   }
 
-  if (!verifySignature(rawBody, signature, repository.webhookSecret)) {
+  // Repo events arrive on two paths: the per-repo hook (signed with the
+  // repo's stored secret) and the GitHub App's own webhook (signed with the
+  // app-wide secret, since the App subscribes to pull_request events).
+  // Accept a valid signature from either.
+  const candidateSecrets = [repository.webhookSecret, process.env.GITHUB_WEBHOOK_SECRET].filter(
+    (secret): secret is string => !!secret,
+  );
+
+  if (!candidateSecrets.some((secret) => verifySignature(rawBody, signature, secret))) {
+    console.warn(`github webhook: rejected event=${eventType} repo=${githubRepoId} reason=bad-signature`);
     return new Response("Invalid signature", { status: 401 });
   }
 
@@ -82,7 +134,12 @@ export async function POST(req: Request) {
   }
 
   try {
+    // Each PR event is delivered twice (per-repo hook + App webhook). A
+    // deterministic event id lets Inngest collapse the copies into a single
+    // run; the head sha keeps distinct pushes distinct.
+    const headSha = payload.pull_request?.head?.sha ?? "none";
     await inngest.send({
+      id: `pr-ingestion/${githubRepoId}/${githubPrNumber}/${action}/${headSha}`,
       name: "github/pr-ingestion.requested",
       data: {
         githubRepoId,

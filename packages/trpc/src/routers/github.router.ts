@@ -40,6 +40,88 @@ import {
   workspaceProcedure,
 } from "../trpc";
 
+/**
+ * Public base URL GitHub delivers webhooks to. GitHub cannot reach
+ * localhost, so a non-routable URL is a configuration error — better to
+ * fail loudly here than to register a webhook that can never deliver.
+ * In development, set GITHUB_WEBHOOK_BASE_URL to a tunnel URL (ngrok/smee).
+ */
+function getWebhookBaseUrl(): string {
+  const baseUrl =
+    process.env.GITHUB_WEBHOOK_BASE_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
+
+  if (!baseUrl) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "GITHUB_WEBHOOK_BASE_URL must be set to register GitHub webhooks",
+    });
+  }
+
+  const { hostname } = new URL(baseUrl);
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]") {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: `GitHub cannot deliver webhooks to ${baseUrl}. Set GITHUB_WEBHOOK_BASE_URL to a publicly reachable URL (in development, use an ngrok or smee.io tunnel).`,
+    });
+  }
+
+  return baseUrl.replace(/\/$/, "");
+}
+
+/**
+ * Registers the per-repo webhook and returns its GitHub id. If a hook for
+ * this URL already exists (e.g. reconnecting a repo), it is reused and its
+ * secret rotated to `webhookSecret` so the value stored in the DB stays
+ * authoritative. Throws TRPCError on failure — a repo without a working
+ * webhook silently never receives PR events, so this must not be swallowed.
+ */
+async function registerRepoWebhook(
+  installationId: number,
+  owner: string,
+  repo: string,
+  webhookSecret: string,
+): Promise<number> {
+  const url = `${getWebhookBaseUrl()}/api/webhooks/github`;
+  const octokit = await getInstallationOctokit(installationId);
+  const config = { url, content_type: "json", secret: webhookSecret };
+
+  try {
+    const { data: webhook } = await octokit.repos.createWebhook({
+      owner,
+      repo,
+      config,
+      events: ["pull_request"],
+    });
+    return webhook.id;
+  } catch (error) {
+    // GitHub answers 422 "Hook already exists" when a hook with this URL is
+    // already registered — reuse it and rotate its secret instead of failing.
+    if ((error as { status?: number }).status === 422) {
+      const { data: hooks } = await octokit.repos.listWebhooks({ owner, repo });
+      const existing = hooks.find((hook) => hook.config.url === url);
+      if (existing) {
+        await octokit.repos.updateWebhook({
+          owner,
+          repo,
+          hook_id: existing.id,
+          config,
+          events: ["pull_request"],
+        });
+        return existing.id;
+      }
+    }
+
+    console.error(`Failed to create GitHub webhook for ${owner}/${repo}`, error);
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message:
+        "Could not register the GitHub webhook for this repository. Check that the GitHub App still has access to it, then try again.",
+    });
+  }
+}
+
 function slugify(name: string): string {
   const base = name
     .toLowerCase()
@@ -203,6 +285,16 @@ export const githubRouter = createTRPCRouter({
         slug = `${baseSlug}-${suffix}`;
       }
 
+      // Register the webhook before touching the DB so a failure surfaces to
+      // the user instead of leaving a repo row that never receives PR events.
+      const webhookSecret = randomBytes(32).toString("hex");
+      const webhookId = await registerRepoWebhook(
+        input.installationId,
+        selectedRepo.owner,
+        selectedRepo.name,
+        webhookSecret,
+      );
+
       const { workspace, repository } = await ctx.db.transaction(async (tx) => {
         const [workspace] = await tx
           .insert(workspaces)
@@ -250,6 +342,8 @@ export const githubRouter = createTRPCRouter({
             name: selectedRepo.name,
             defaultBranch: selectedRepo.defaultBranch,
             installationId: input.installationId,
+            webhookId,
+            webhookSecret,
           })
           .returning();
 
@@ -318,28 +412,12 @@ export const githubRouter = createTRPCRouter({
       // delivered without relying on a single global secret. Generated
       // up front so it can be persisted alongside the repository row.
       const webhookSecret = randomBytes(32).toString("hex");
-      const baseUrl = process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? "http://localhost:3000";
-      let webhookId: number | null = null;
-
-      try {
-        const octokit = await getInstallationOctokit(input.installationId);
-        const { data: webhook } = await octokit.repos.createWebhook({
-          owner: selectedRepo.owner,
-          repo: selectedRepo.name,
-          config: {
-            url: `${baseUrl}/api/webhooks/github`,
-            content_type: "json",
-            secret: webhookSecret,
-          },
-          events: ["pull_request"],
-        });
-        webhookId = webhook.id;
-      } catch (error) {
-        // Best-effort: the repo can still be connected without a live
-        // webhook (e.g. re-connecting an already-hooked repo). Logged so
-        // missing webhooks can be diagnosed, but doesn't block onboarding.
-        console.error("Failed to create GitHub webhook", error);
-      }
+      const webhookId = await registerRepoWebhook(
+        input.installationId,
+        selectedRepo.owner,
+        selectedRepo.name,
+        webhookSecret,
+      );
 
       const [repository] = await ctx.db
         .insert(repositories)
@@ -449,9 +527,23 @@ export const githubRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
+      // Disconnecting deleted the GitHub webhook and cleared the stored
+      // secret, so reconnecting must register a fresh one — otherwise the
+      // repo comes back but never receives PR events again.
+      if (!repository.owner || !repository.name) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Repository is missing owner/name" });
+      }
+      const webhookSecret = randomBytes(32).toString("hex");
+      const webhookId = await registerRepoWebhook(
+        repository.installationId,
+        repository.owner,
+        repository.name,
+        webhookSecret,
+      );
+
       await ctx.db
         .update(repositories)
-        .set({ disconnectedAt: null })
+        .set({ disconnectedAt: null, webhookId, webhookSecret })
         .where(eq(repositories.id, repository.id));
 
       try {

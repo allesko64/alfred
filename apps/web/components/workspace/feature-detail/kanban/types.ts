@@ -11,6 +11,7 @@ export interface KanbanTask {
   priority: TaskPriority
   assignedTo: string | null
   position: number | null
+  implementationPrompt: string | null
 }
 
 export interface WorkspaceMember {

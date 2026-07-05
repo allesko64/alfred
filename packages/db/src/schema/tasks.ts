@@ -30,6 +30,9 @@ export const tasks = pgTable(
     }),
     estimatedHours: integer("estimated_hours"),
     position: integer("position"),
+    // AI-generated coding-agent brief, filled by a fan-out step after task
+    // generation. Null while generating (or if generation failed).
+    implementationPrompt: text("implementation_prompt"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
