@@ -72,3 +72,11 @@ export interface FeatureChangelogGenerationRequested {
     featureId: string;
   };
 }
+
+/** Fired right after a feature ships to email every active workspace member about it. */
+export interface FeatureShippedEmailRequested {
+  name: "feature/shipped-email.requested";
+  data: {
+    featureId: string;
+  };
+}

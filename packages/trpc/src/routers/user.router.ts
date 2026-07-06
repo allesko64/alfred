@@ -19,16 +19,12 @@ export const userRouter = createTRPCRouter({
     const [user] = await ctx.db
       .select({
         digestEnabled: users.digestEnabled,
-        digestHourLocal: users.digestHourLocal,
-        digestTimezone: users.digestTimezone,
       })
       .from(users)
       .where(eq(users.id, ctx.user.id))
       .limit(1);
 
-    return (
-      user ?? { digestEnabled: true, digestHourLocal: 9, digestTimezone: "UTC" }
-    );
+    return user ?? { digestEnabled: true };
   }),
 
   updateDigestPreferences: protectedProcedure

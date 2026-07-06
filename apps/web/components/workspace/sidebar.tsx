@@ -16,7 +16,6 @@ import {
   ScrollIcon,
   SignOutIcon,
   SparkleIcon,
-  UserCircleIcon,
 } from "@phosphor-icons/react";
 
 import { cn } from "@/lib/utils";
@@ -158,7 +157,10 @@ export function Sidebar({ workspaceId }: { workspaceId: string }) {
 
   const onSignOut = async () => {
     await signOut();
+    // Purge the client-side Router Cache so back navigation after logout
+    // re-fetches from the server, where middleware redirects to /login.
     router.push("/login");
+    router.refresh();
   };
 
   return (
@@ -291,18 +293,6 @@ export function Sidebar({ workspaceId }: { workspaceId: string }) {
       >
         {(close) => (
           <>
-            <button
-              type="button"
-              onClick={() => {
-                router.push(`/workspace/${workspaceId}/settings`);
-                close();
-              }}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent [&_svg]:size-4"
-            >
-              <UserCircleIcon />
-              Profile
-            </button>
-            <div className="-mx-1 my-1 h-px bg-border" />
             <button
               type="button"
               onClick={() => {

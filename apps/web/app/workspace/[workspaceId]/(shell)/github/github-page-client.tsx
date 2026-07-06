@@ -70,6 +70,16 @@ export function GithubPageClient() {
   const reconnectRepository = useMutation(
     trpc.github.reconnectRepository.mutationOptions({ onSuccess: invalidateRepos }),
   )
+  const deleteRepository = useMutation(
+    trpc.github.deleteRepository.mutationOptions({
+      onSuccess: () => {
+        toast.success("Repository deleted")
+        invalidateRepos()
+        queryClient.invalidateQueries({ queryKey: trpc.github.getRecentPRs.queryKey({ workspaceId }) })
+      },
+      onError: (error) => toast.error(error.message || "Could not delete that repository"),
+    }),
+  )
 
   async function handleConnect() {
     setIsRedirecting(true)
@@ -178,8 +188,10 @@ export function GithubPageClient() {
                   repo={repo}
                   onDisconnect={() => disconnectRepository.mutate({ workspaceId, repositoryId: repo.id })}
                   onReconnect={() => reconnectRepository.mutate({ workspaceId, repositoryId: repo.id })}
+                  onDelete={() => deleteRepository.mutate({ workspaceId, repositoryId: repo.id })}
                   isDisconnecting={disconnectRepository.isPending}
                   isReconnecting={reconnectRepository.isPending}
+                  isDeleting={deleteRepository.isPending}
                 />
               ))}
             </div>

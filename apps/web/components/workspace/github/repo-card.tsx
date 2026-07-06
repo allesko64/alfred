@@ -31,14 +31,18 @@ export function RepoCard({
   repo,
   onDisconnect,
   onReconnect,
+  onDelete,
   isDisconnecting,
   isReconnecting,
+  isDeleting,
 }: {
   repo: RepoCardData
   onDisconnect: () => void
   onReconnect: () => void
+  onDelete: () => void
   isDisconnecting: boolean
   isReconnecting: boolean
+  isDeleting: boolean
 }) {
   const isActive = !repo.disconnectedAt
 
@@ -95,6 +99,26 @@ export function RepoCard({
               Reconnect
             </Button>
           )}
+          <Dialog>
+            <DialogTrigger render={<Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" />}>
+              Delete
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete {repo.fullName}?</DialogTitle>
+                <DialogDescription>
+                  This permanently removes the repository along with all its pull requests, AI reviews, and
+                  indexed code. This cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="destructive" onClick={onDelete} disabled={isDeleting}>
+                  {isDeleting && <SpinnerIcon className="size-4 animate-spin" />}
+                  Delete permanently
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </CardContent>
     </Card>

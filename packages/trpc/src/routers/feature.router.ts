@@ -613,6 +613,11 @@ export const featureRouter = createTRPCRouter({
         data: { featureId: input.featureId },
       });
 
+      await inngest.send({
+        name: "feature/shipped-email.requested",
+        data: { featureId: input.featureId },
+      });
+
       return shipped;
     }),
 

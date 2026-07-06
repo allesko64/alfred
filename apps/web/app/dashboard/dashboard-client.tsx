@@ -34,7 +34,10 @@ export function DashboardClient() {
 
   const onSignOut = async () => {
     await signOut()
+    // Purge the client-side Router Cache so back navigation after logout
+    // re-fetches from the server, where middleware redirects to /login.
     router.push("/login")
+    router.refresh()
   }
 
   return (

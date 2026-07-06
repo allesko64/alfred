@@ -8,11 +8,7 @@ import { toast } from "sonner"
 import { useTRPC } from "@/lib/trpc/client"
 import { TopBar } from "@/components/workspace/topbar"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-
-const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
 
 export function SettingsClient() {
   const { workspaceId } = useParams<{ workspaceId: string }>()
@@ -21,14 +17,10 @@ export function SettingsClient() {
   const { data: preferences } = useQuery(trpc.user.getDigestPreferences.queryOptions())
 
   const [digestEnabled, setDigestEnabled] = useState(true)
-  const [digestHourLocal, setDigestHourLocal] = useState(9)
-  const [digestTimezone, setDigestTimezone] = useState("UTC")
 
   useEffect(() => {
     if (!preferences) return
     setDigestEnabled(preferences.digestEnabled)
-    setDigestHourLocal(preferences.digestHourLocal)
-    setDigestTimezone(preferences.digestTimezone)
   }, [preferences])
 
   const updatePreferences = useMutation(
@@ -39,7 +31,7 @@ export function SettingsClient() {
   )
 
   function onSave() {
-    updatePreferences.mutate({ digestEnabled, digestHourLocal, digestTimezone })
+    updatePreferences.mutate({ digestEnabled })
   }
 
   return (
@@ -51,7 +43,7 @@ export function SettingsClient() {
           <CardHeader>
             <CardTitle>Daily digest</CardTitle>
             <CardDescription>
-              Alfred emails you a personalized summary of what needs attention each day.
+              Alfred emails you a personalized summary of what needs attention every morning at 9:00 AM IST.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -64,35 +56,6 @@ export function SettingsClient() {
               />
               Enable daily digest email
             </label>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="digest-hour">Delivery hour (your local time)</Label>
-              <select
-                id="digest-hour"
-                value={digestHourLocal}
-                disabled={!digestEnabled}
-                onChange={(e) => setDigestHourLocal(Number(e.target.value))}
-                className="h-8 w-32 rounded-lg border border-input bg-transparent px-2 text-sm disabled:opacity-50"
-              >
-                {HOURS.map((hour) => (
-                  <option key={hour} value={hour}>
-                    {String(hour).padStart(2, "0")}:00
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="digest-timezone">Timezone (IANA name)</Label>
-              <Input
-                id="digest-timezone"
-                value={digestTimezone}
-                disabled={!digestEnabled}
-                onChange={(e) => setDigestTimezone(e.target.value)}
-                placeholder="e.g. Asia/Kolkata"
-                className="w-56"
-              />
-            </div>
 
             <Button size="sm" className="self-start" disabled={updatePreferences.isPending} onClick={onSave}>
               {updatePreferences.isPending ? "Saving..." : "Save preferences"}

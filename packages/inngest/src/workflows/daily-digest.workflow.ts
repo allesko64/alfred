@@ -9,8 +9,8 @@ import {
 } from "@alfred/db";
 import { and, eq, gte, inArray } from "drizzle-orm";
 import type { InngestFunction } from "inngest";
-import { Resend } from "resend";
 import { inngest } from "../client";
+import { EMAIL_FROM, getResendClient } from "../email";
 
 const ACTIVE_STATUSES = [
   "PLANNING",
@@ -34,20 +34,6 @@ interface MemberDigest {
   pendingApprovals: DigestItem[];
   inProgress: DigestItem[];
   shippedYesterday: DigestItem[];
-}
-
-/** Converts a UTC instant to the wall-clock hour in `timezone`, so each member can pick their own delivery hour while the cron itself just ticks hourly in UTC. */
-function getHourInTimezone(date: Date, timezone: string): number {
-  try {
-    const formatted = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      hour: "numeric",
-      hour12: false,
-    }).format(date);
-    return Number.parseInt(formatted, 10) % 24;
-  } catch {
-    return date.getUTCHours();
-  }
 }
 
 async function buildMemberDigest(
@@ -187,18 +173,9 @@ function renderDigestEmail(
   </div>`;
 }
 
-let resendClient: Resend | null | undefined;
-
-function getResendClient(): Resend | null {
-  if (resendClient === undefined) {
-    const apiKey = process.env.RESEND_API_KEY;
-    resendClient = apiKey ? new Resend(apiKey) : null;
-  }
-  return resendClient;
-}
-
+// 03:30 UTC = 09:00 IST — one fixed daily send for everyone.
 const _dailyDigestWorkflow = inngest.createFunction(
-  { id: "daily-digest", triggers: [{ cron: "0 * * * *" }] },
+  { id: "daily-digest", triggers: [{ cron: "30 3 * * *" }] },
   async ({ step }) => {
     const now = new Date();
 
@@ -225,8 +202,6 @@ const _dailyDigestWorkflow = inngest.createFunction(
               email: users.email,
               name: users.name,
               digestEnabled: users.digestEnabled,
-              digestHourLocal: users.digestHourLocal,
-              digestTimezone: users.digestTimezone,
             })
             .from(workspaceMemberships)
             .innerJoin(users, eq(users.id, workspaceMemberships.userId))
@@ -241,11 +216,6 @@ const _dailyDigestWorkflow = inngest.createFunction(
 
       for (const member of members) {
         if (!member.digestEnabled) continue;
-        if (
-          getHourInTimezone(now, member.digestTimezone) !==
-          member.digestHourLocal
-        )
-          continue;
 
         await step.run(
           `send-digest-${workspace.id}-${member.userId}`,
@@ -261,7 +231,7 @@ const _dailyDigestWorkflow = inngest.createFunction(
             const resend = getResendClient();
             if (resend) {
               await resend.emails.send({
-                from: "Alfred <alfred@alfred.dev>",
+                from: EMAIL_FROM,
                 to: member.email,
                 subject: `Your Alfred digest — ${now.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}`,
                 html: renderDigestEmail(name, intro, digest),

@@ -48,12 +48,12 @@ export function TopBar({ title, workspaceId }: { title: string; workspaceId: str
   }
 
   return (
-    <div className="flex h-16 items-center gap-4 border-b border-border px-6">
-      <h1 className="w-48 shrink-0 text-xl font-semibold text-foreground">{title}</h1>
+    <div className="grid h-16 grid-cols-[1fr_minmax(0,28rem)_1fr] items-center gap-4 border-b border-border px-6">
+      <h1 className="truncate text-xl font-semibold text-foreground">{title}</h1>
 
       <SearchPalette workspaceId={workspaceId} />
 
-      <div className="flex shrink-0 items-center gap-3">
+      <div className="flex items-center justify-end gap-3">
         <GooDropdown
           panelWidth={320}
           align="end"

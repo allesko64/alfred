@@ -13,7 +13,7 @@ import {
   requestReviewNowSchema,
   unlinkPullRequestSchema,
 } from "@alfred/validators";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import {
   aiReviews,
   checkBillingLimit,
@@ -36,6 +36,7 @@ import { inngest, reportWorkflowProgress } from "@alfred/inngest";
 import {
   createTRPCRouter,
   protectedProcedure,
+  requireWorkspaceRole,
   workspaceInputSchema,
   workspaceProcedure,
 } from "../trpc";
@@ -554,6 +555,77 @@ export const githubRouter = createTRPCRouter({
       } catch (error) {
         console.error("Failed to fire repo/vectorization.requested", error);
       }
+
+      return { ok: true };
+    }),
+
+  /**
+   * Permanently deletes a repository and everything hanging off it —
+   * pull requests, AI reviews, indexed code chunks, and workflow runs all
+   * go via ON DELETE CASCADE. Unlike disconnect, this cannot be undone,
+   * so it's gated to owner/admin.
+   */
+  deleteRepository: workspaceProcedure
+    .use(requireWorkspaceRole(["owner", "admin"]))
+    .input(repositoryActionSchema)
+    .mutation(async ({ ctx, input }) => {
+      const [repository] = await ctx.db
+        .select({
+          id: repositories.id,
+          owner: repositories.owner,
+          name: repositories.name,
+          installationId: repositories.installationId,
+          webhookId: repositories.webhookId,
+        })
+        .from(repositories)
+        .where(and(eq(repositories.id, input.repositoryId), eq(repositories.workspaceId, ctx.workspaceId)))
+        .limit(1);
+
+      if (!repository) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      if (repository.webhookId && repository.owner && repository.name) {
+        try {
+          const octokit = await getInstallationOctokit(repository.installationId);
+          await octokit.repos.deleteWebhook({
+            owner: repository.owner,
+            repo: repository.name,
+            hook_id: repository.webhookId,
+          });
+        } catch (error) {
+          // Best-effort: the webhook may already be gone (manually removed,
+          // installation revoked, etc.) — don't block deletion on it.
+          console.error("Failed to delete GitHub webhook", error);
+        }
+      }
+
+      await ctx.db.transaction(async (tx) => {
+        // Features whose linked PR is about to vanish would be stranded in a
+        // PR-dependent status — send them back to development first.
+        const linkedFeatureIds = (
+          await tx
+            .select({ featureId: pullRequests.featureId })
+            .from(pullRequests)
+            .where(eq(pullRequests.repositoryId, repository.id))
+        )
+          .map((row) => row.featureId)
+          .filter((id): id is string => id !== null);
+
+        if (linkedFeatureIds.length > 0) {
+          await tx
+            .update(features)
+            .set({ status: "IN_DEVELOPMENT", updatedAt: new Date() })
+            .where(
+              and(
+                inArray(features.id, linkedFeatureIds),
+                inArray(features.status, ["PR_LINKED", "REVIEWING", "RE_REVIEWING", "REVIEW_PASSED"]),
+              ),
+            );
+        }
+
+        await tx.delete(repositories).where(eq(repositories.id, repository.id));
+      });
 
       return { ok: true };
     }),

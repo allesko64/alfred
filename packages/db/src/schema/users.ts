@@ -1,11 +1,4 @@
-import {
-  boolean,
-  integer,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -16,8 +9,6 @@ export const users = pgTable("users", {
   githubUsername: text("github_username").unique(),
   githubAccessToken: text("github_access_token"),
   digestEnabled: boolean("digest_enabled").notNull().default(true),
-  digestHourLocal: integer("digest_hour_local").notNull().default(9),
-  digestTimezone: text("digest_timezone").notNull().default("UTC"),
   /** Platform-wide admin flag, separate from per-workspace membershipRoleEnum. */
   isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),

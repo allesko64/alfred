@@ -141,6 +141,13 @@
       "when": 1783273966257,
       "tag": "0019_bouncy_inertia",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1783325700592,
+      "tag": "0020_lethal_random",
+      "breakpoints": true
     }
   ]
 }
