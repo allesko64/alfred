@@ -54,5 +54,6 @@ jobs:
             pm2 save
             sleep 8
             pm2 list | grep alfred-web | grep online
-            # Re-sync Inngest so new/changed functions (crons, triggers) take effect
-            curl -sf -X PUT http://localhost:3000/api/inngest > /dev/null
+            # Re-sync Inngest so new/changed functions (crons, triggers) take effect.
+            # Don't fail the whole deploy if this best-effort sync endpoint returns non-2xx.
+            curl -sf -X PUT http://localhost:3000/api/inngest > /dev/null || echo "Warning: Inngest sync failed (continuing deploy)"
