@@ -54,3 +54,5 @@ jobs:
             pm2 save
             sleep 8
             pm2 list | grep alfred-web | grep online
+            # Re-sync Inngest so new/changed functions (crons, triggers) take effect
+            curl -sf -X PUT http://localhost:3000/api/inngest > /dev/null
