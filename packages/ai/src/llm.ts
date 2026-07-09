@@ -22,6 +22,11 @@ export function getLLMModel(): string {
   return process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 }
 
+/** Model for AI code reviews only. REVIEW_MODEL lets reviews run on a stronger model while every other workflow stays on the cheaper OPENAI_MODEL default. */
+export function getReviewModel(): string {
+  return process.env.REVIEW_MODEL ?? getLLMModel();
+}
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
@@ -35,9 +40,10 @@ export interface ChatCompletionResult {
 /** Plain-text chat completion. Returns the message content and token usage. */
 export async function chatComplete(
   messages: ChatMessage[],
+  model: string = getLLMModel(),
 ): Promise<ChatCompletionResult> {
   const response = await getLLMClient().chat.completions.create({
-    model: getLLMModel(),
+    model,
     messages,
   });
 
@@ -56,22 +62,26 @@ export interface JSONCompletionResult<T> {
 /** Chat completion that strictly parses the response as JSON of shape T. Retries once with a stricter prompt if parsing fails. */
 export async function chatCompleteJSON<T>(
   messages: ChatMessage[],
+  model?: string,
 ): Promise<JSONCompletionResult<T>> {
-  const first = await chatComplete(messages);
+  const first = await chatComplete(messages, model);
   try {
     return {
       data: JSON.parse(stripCodeFence(first.content)) as T,
       tokensUsed: first.tokensUsed,
     };
   } catch {
-    const retry = await chatComplete([
-      ...messages,
-      {
-        role: "user",
-        content:
-          "Your previous response was not valid JSON. Respond with ONLY the raw JSON object — no markdown code fences, no commentary, no extra text before or after.",
-      },
-    ]);
+    const retry = await chatComplete(
+      [
+        ...messages,
+        {
+          role: "user",
+          content:
+            "Your previous response was not valid JSON. Respond with ONLY the raw JSON object — no markdown code fences, no commentary, no extra text before or after.",
+        },
+      ],
+      model,
+    );
     return {
       data: JSON.parse(stripCodeFence(retry.content)) as T,
       tokensUsed: first.tokensUsed + retry.tokensUsed,

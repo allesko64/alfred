@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -181,6 +181,16 @@ export function ReviewClient() {
     ),
   )
   const historyQuery = useQuery(trpc.review.getByFeature.queryOptions({ workspaceId, featureId }, { enabled: !!pr }))
+
+  // The status poll (2s) sees the run finish before any SSE event lands —
+  // refetch the review list on completion so the new review renders without
+  // a page reload.
+  const workflowRunStatus = workflowStatusQuery.data?.status
+  useEffect(() => {
+    if (workflowRunStatus === "completed") {
+      queryClient.invalidateQueries({ queryKey: trpc.review.getByFeature.queryKey({ workspaceId, featureId }) })
+    }
+  }, [workflowRunStatus, queryClient, trpc, workspaceId, featureId])
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: trpc.github.getLinkedPullRequest.queryKey({ workspaceId, featureId }) })

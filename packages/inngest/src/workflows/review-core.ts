@@ -2,8 +2,8 @@ import {
   chatCompleteJSON,
   cosineSimilarity,
   embedTexts,
-  getLLMModel,
   getPullRequestWithDiff,
+  getReviewModel,
   upsertPullRequestComment,
 } from "@alfred/ai";
 import {
@@ -68,6 +68,15 @@ Large PR Notice (empty if diff was under threshold):
 ---
 
 HOW TO READ THE DIFF
+
+The diff is the complete, cumulative comparison of the PR branch
+against its base — every commit on the branch combined into the
+branch's current final state. It is never a per-commit or
+incremental diff. Code shown here is exactly what the branch
+contains right now; earlier versions of these lines from
+intermediate commits no longer exist anywhere. Unless the Large
+PR Notice says the diff was trimmed, there are no other changes
+in this PR beyond what you see.
 
 Read every changed file and understand how the edits connect to
 each other before judging any single line in isolation.
@@ -185,14 +194,32 @@ without needing to cross-check the PRD separately.
 RE-REVIEWS
 
 When previous review issues are provided, this is a re-review.
+Each previous issue is labelled with a reference like [PREV-1].
 
-Check the diff against each previous issue to see whether it's
-genuinely been addressed, not just whether the relevant file was
-touched. Resolved issues drop out of the list entirely — there's
-no need to mention that something used to be a problem. Anything
-still outstanding gets included again, stated plainly as still
-present. New issues found this time are listed alongside whatever
-remains from before, at the same standard described above.
+For every previous issue, you must return an entry in
+"previous_issue_verdicts" with a verdict of either "resolved" or
+"still_present", plus evidence quoting the specific lines of the
+current diff that justify your verdict.
+
+Remember: the diff always shows the branch's current, final state.
+If the code that caused a previous issue no longer appears in the
+diff — because it was replaced by a correct implementation — that
+issue is resolved. Judge only the code in front of you; do not
+assume the old defect survives somewhere you cannot see.
+
+A verdict of "still_present" requires you to point at concrete
+lines in the current diff that still exhibit the problem. If you
+cannot cite such lines, the verdict is "resolved". Do not keep an
+issue alive out of caution, and do not soften it into a vaguer
+version of itself — that is the same issue and needs the same
+evidence.
+
+Resolved issues drop out of the "issues" list entirely — there's
+no need to mention that something used to be a problem. An issue
+that is still present gets re-listed in "issues" with its original
+title kept verbatim, so it can be tracked across reviews. New
+issues found this time are listed alongside, at the same standard
+described above.
 
 ---
 
@@ -236,11 +263,23 @@ no preamble, no text outside the JSON.
     }
   ],
 
+  "previous_issue_verdicts": [
+    {
+      "issue_ref": "string — the [PREV-n] label of the previous issue",
+      "verdict": "resolved | still_present",
+      "evidence": "string — the specific current-diff lines that
+                   justify this verdict"
+    }
+  ],
+
   "generated_by": "string — the model name used"
 }
 
 Notes on the output:
 - "issues" can be an empty array — that's a good and valid result
+- "previous_issue_verdicts" must contain exactly one entry per
+  [PREV-n] issue you were given; leave it as an empty array when
+  no previous issues were provided
 - Every issue needs every field; use null only for file_path /
   line_number when truly unknown
 - Keep the summary honest and specific, not generic praise or
@@ -396,10 +435,19 @@ function formatPreviousIssues(
 
   return previousIssues
     .map(
-      (issue) =>
-        `Review #${previousReview.reviewNumber} — [critical] ${issue.title}: ${issue.description ?? ""} (${issue.prdRequirementViolated ?? "general issue"})`,
+      (issue, i) =>
+        `[PREV-${i + 1}] Review #${previousReview.reviewNumber} — [critical] ${issue.title}: ${issue.description ?? ""} (${issue.prdRequirementViolated ?? "general issue"})`,
     )
     .join("\n");
+}
+
+/** Maps the model's PREV-n verdicts back to the previous issues by position. */
+function verdictForIssue(
+  verdicts: ReviewResultOut["previous_issue_verdicts"],
+  index: number,
+): "resolved" | "still_present" | undefined {
+  return verdicts.find((v) => v.issue_ref.replace(/[[\]]/g, "") === `PREV-${index + 1}`)
+    ?.verdict;
 }
 
 interface PerformReviewParams {
@@ -651,9 +699,10 @@ export async function performReview(
           : "",
       );
 
-    const { data: raw, tokensUsed } = await chatCompleteJSON<unknown>([
-      { role: "system", content: prompt },
-    ]);
+    const { data: raw, tokensUsed } = await chatCompleteJSON<unknown>(
+      [{ role: "system", content: prompt }],
+      getReviewModel(),
+    );
     const parsed = reviewResultOutSchema.safeParse(raw);
     if (!parsed.success) {
       throw new Error(
@@ -688,7 +737,7 @@ export async function performReview(
         summary: result.summary,
         blockingCount: critical.length,
         nonBlockingCount: minorCount,
-        modelUsed: result.generated_by || getLLMModel(),
+        modelUsed: result.generated_by || getReviewModel(),
         tokensUsed: result.tokensUsed,
         isLargePR: diffSection.isLargePR,
       })
@@ -721,20 +770,31 @@ export async function performReview(
       );
     }
 
-    // Decision 5: previous critical issues not re-flagged this round are resolved.
+    // Decision 5, revised: the model now rules on each previous issue
+    // explicitly via previous_issue_verdicts. Title matching remains only as
+    // a fallback for verdicts the model failed to return.
     if (previousIssues.length > 0) {
       const stillPresentTitles = new Set(
         critical.map((issue) => issue.title.toLowerCase()),
       );
-      const resolvedIssueIds = previousIssues
-        .filter((issue) => !stillPresentTitles.has(issue.title.toLowerCase()))
-        .map((issue) => issue.id);
+      const resolved = previousIssues.filter((issue, i) => {
+        const verdict = verdictForIssue(result.previous_issue_verdicts, i);
+        if (verdict) return verdict === "resolved";
+        return !stillPresentTitles.has(issue.title.toLowerCase());
+      });
 
-      for (const issueId of resolvedIssueIds) {
+      for (const issue of resolved) {
         await db
           .update(reviewIssues)
           .set({ isResolved: true, resolvedAt: new Date() })
-          .where(eq(reviewIssues.id, issueId));
+          .where(eq(reviewIssues.id, issue.id));
+      }
+
+      if (resolved.length > 0) {
+        await db
+          .update(aiReviews)
+          .set({ resolvedFromPrevious: resolved.map((issue) => issue.title) })
+          .where(eq(aiReviews.id, saved.id));
       }
     }
 

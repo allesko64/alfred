@@ -30,6 +30,7 @@ export function useWorkspaceEvents(workspaceId: string) {
       queryClient.invalidateQueries({ queryKey: trpc.feature.getWorkflowProgress.queryKey() })
       queryClient.invalidateQueries({ queryKey: trpc.feature.getById.queryKey() })
       queryClient.invalidateQueries({ queryKey: trpc.review.getWorkflowStatus.queryKey() })
+      queryClient.invalidateQueries({ queryKey: trpc.review.getByFeature.queryKey() })
       queryClient.invalidateQueries({ queryKey: trpc.notification.getUnread.queryKey() })
       queryClient.invalidateQueries({ queryKey: trpc.notification.getWorkspaceActivity.queryKey() })
     }
