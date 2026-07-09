@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { LayoutTextFlip } from "@/components/ui/layout-text-flip"
 import { BackgroundRippleEffect } from "@/components/ui/background-ripple-effect"
 import { AnimatedTooltip } from "@/components/ui/animated-tooltip"
+import { DemoVideo } from "@/components/landing/DemoVideo"
 
 const PHASES = [
   { word: "Listens", color: "#F59E0B", icon: Ear, designation: "Understands your requirements" },
@@ -163,20 +164,7 @@ export function Hero() {
                 app.alfred.ai
               </span>
             </div>
-            <div
-              className="relative bg-card rounded-b-xl h-[480px] md:h-[540px] flex items-center justify-center"
-            >
-              <div
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  background:
-                    "radial-gradient(ellipse 60% 60% at 50% 50%, hsl(var(--primary) / 0.05), transparent)",
-                }}
-              />
-              <p className="relative text-muted-foreground text-lg italic">
-                Demo video coming soon
-              </p>
-            </div>
+            <DemoVideo />
           </div>
         </motion.div>
       </div>

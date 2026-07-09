@@ -67,6 +67,15 @@ const _changelogGenerationWorkflow = inngest.createFunction(
     const { featureId } = event.data;
 
     const context = await step.run("fetch-context", async () => {
+      // A feature gets exactly one changelog entry — skip duplicate events
+      // (double approve, redundant sends) instead of inserting again.
+      const [existingEntry] = await db
+        .select({ id: changelog.id })
+        .from(changelog)
+        .where(eq(changelog.featureId, featureId))
+        .limit(1);
+      if (existingEntry) return { alreadyGenerated: true as const };
+
       const [feature] = await db
         .select()
         .from(features)
@@ -103,6 +112,10 @@ const _changelogGenerationWorkflow = inngest.createFunction(
       return { status: "skipped", reason: "feature-not-found" };
     }
 
+    if ("alreadyGenerated" in context) {
+      return { status: "skipped", reason: "changelog-already-exists" };
+    }
+
     const { feature, prd, taskRows, previousVersion } = context;
 
     await step.run("report-progress-running", async () => {
@@ -135,7 +148,17 @@ const _changelogGenerationWorkflow = inngest.createFunction(
 
     const version = nextVersion(previousVersion, generated.type);
 
-    await step.run("save-and-notify", async () => {
+    const saved = await step.run("save-and-notify", async () => {
+      // Re-check inside the step (not the memoized fetch-context) so an
+      // Inngest retry of this step after a partial failure can't insert the
+      // entry a second time.
+      const [existingEntry] = await db
+        .select({ id: changelog.id })
+        .from(changelog)
+        .where(eq(changelog.featureId, featureId))
+        .limit(1);
+      if (existingEntry) return { inserted: false };
+
       await db.insert(changelog).values({
         workspaceId: feature.workspaceId,
         featureId,
@@ -158,7 +181,13 @@ const _changelogGenerationWorkflow = inngest.createFunction(
         progressMessage: "Changelog updated",
         progressPercent: 100,
       });
+
+      return { inserted: true };
     });
+
+    if (!saved.inserted) {
+      return { status: "skipped", reason: "changelog-already-exists" };
+    }
 
     return { status: "generated", version };
   },

@@ -129,7 +129,12 @@ export function ApprovalClient() {
         toast.success("Feature shipped!")
         invalidate()
       },
-      onError: (error) => toast.error(error.message || "Could not approve this feature"),
+      onError: (error) => {
+        toast.error(error.message || "Could not approve this feature")
+        // The feature may already be shipped (e.g. a duplicate approve) —
+        // refetch so a stale button hides itself.
+        invalidate()
+      },
     }),
   )
 
@@ -162,20 +167,28 @@ export function ApprovalClient() {
                 Reject
               </span>
             </Button>
-            <StatefulButton
-              className="px-4 py-1.5 text-sm"
-              onClick={() => approve.mutateAsync({ workspaceId, featureId })}
-            >
-              <span className="flex items-center gap-1.5 whitespace-nowrap">
-                <RocketLaunchIcon className="size-4" />
-                Approve &amp; Ship
-              </span>
-            </StatefulButton>
+            {/* Hidden as soon as the approve succeeds — don't wait for the
+                status refetch — and locked while the request is in flight. */}
+            {!approve.isSuccess && (
+              <StatefulButton
+                disabled={approve.isPending}
+                className={cn(
+                  "px-4 py-1.5 text-sm",
+                  approve.isPending && "pointer-events-none opacity-50",
+                )}
+                onClick={() => approve.mutateAsync({ workspaceId, featureId })}
+              >
+                <span className="flex items-center gap-1.5 whitespace-nowrap">
+                  <RocketLaunchIcon className="size-4" />
+                  Approve &amp; Ship
+                </span>
+              </StatefulButton>
+            )}
           </div>
         </ApprovalGate>
       )
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [role, details?.feature.status, workspaceId, featureId]),
+    }, [role, details?.feature.status, workspaceId, featureId, approve.isPending, approve.isSuccess]),
   )
 
   if (detailsQuery.isLoading) {

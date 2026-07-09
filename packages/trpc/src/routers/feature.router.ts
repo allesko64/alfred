@@ -575,17 +575,13 @@ export const featureRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
-      if (feature.status !== "PENDING_APPROVAL") {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Feature is not pending approval",
-        });
-      }
-
       if (!ctx.user) {
         throw new TRPCError({ code: "UNAUTHORIZED" });
       }
 
+      // The status guard lives in the UPDATE's WHERE clause so two concurrent
+      // approves can't both pass a pre-read check — only one wins the write,
+      // and only the winner sends the changelog/email events below.
       const now = new Date();
       const [shipped] = await ctx.db
         .update(features)
@@ -596,8 +592,20 @@ export const featureRouter = createTRPCRouter({
           shippedAt: now,
           updatedAt: now,
         })
-        .where(eq(features.id, input.featureId))
+        .where(
+          and(
+            eq(features.id, input.featureId),
+            eq(features.status, "PENDING_APPROVAL"),
+          ),
+        )
         .returning();
+
+      if (!shipped) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Feature is not pending approval",
+        });
+      }
 
       await ctx.db.insert(notifications).values({
         userId: feature.createdBy,
@@ -608,12 +616,16 @@ export const featureRouter = createTRPCRouter({
         featureId: input.featureId,
       });
 
+      // A feature ships at most once, so a per-feature event id lets Inngest
+      // dedupe any redundant sends (e.g. from a retried request).
       await inngest.send({
+        id: `changelog-generation-${input.featureId}`,
         name: "feature/changelog-generation.requested",
         data: { featureId: input.featureId },
       });
 
       await inngest.send({
+        id: `shipped-email-${input.featureId}`,
         name: "feature/shipped-email.requested",
         data: { featureId: input.featureId },
       });
